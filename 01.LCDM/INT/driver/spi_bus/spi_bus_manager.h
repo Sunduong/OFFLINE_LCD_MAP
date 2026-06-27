@@ -33,3 +33,4 @@ void spi_bus_all_cs_high(void);
 void spi_bus_select_lcd(void);
 void spi_bus_select_sd(void);
 
+#endif // SPI_BUS_MANAGER_H

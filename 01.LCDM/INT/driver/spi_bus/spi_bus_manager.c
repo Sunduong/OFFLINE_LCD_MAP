@@ -17,8 +17,7 @@ void spi_bus_init(spi_host_device_t host)
         .max_transfer_sz = SOC_SPI_MAXIMUM_BUFFER_SIZE,
     };
     ESP_ERROR_CHECK(spi_bus_initialize(host, &buscfg, SPI_DMA_CH_AUTO));
-    ESP_LOGI(TAG, "SPI bus initialized (MOSI=%d, MISO=%d, SCK=%d)",
-    SPI_MOSI_PIN, SPI_MISO_PIN, SPI_SCK_PIN);
+    ESP_LOGI(TAG, "SPI bus initialized (MOSI=%d, MISO=%d, SCK=%d)", SPI_MOSI_PIN, SPI_MISO_PIN, SPI_SCK_PIN);
 }
 
 void spi_bus_all_cs_high(void)

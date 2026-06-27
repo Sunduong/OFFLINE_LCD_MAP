@@ -1,3 +1,6 @@
+#ifndef LCD_DRIVER_H
+#define LCD_DRIVER_H
+
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "spi_bus_manager.h"
@@ -38,3 +41,4 @@ void lcd_draw_hline(lcd_t *lcd, uint16_t x, uint16_t y, uint16_t width, uint32_t
 void lcd_draw_vline(lcd_t *lcd, uint16_t x, uint16_t y, uint16_t height, uint32_t color);
 void lcd_draw_rect(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint32_t color);
 
+#endif // LCD_DRIVER_H

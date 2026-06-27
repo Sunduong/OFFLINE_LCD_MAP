@@ -14,12 +14,14 @@ static void lcd_spi_pre_transfer(spi_transaction_t *t)
 
 static void lcd_send_cmd(lcd_t *lcd, uint8_t cmd)
 {
+    spi_bus_select_lcd();
     spi_transaction_t t = {
         .length = 8, // Command is 1 byte
         .tx_buffer = &cmd,
         .user = (void*) 0, // DC low for command
     };
     ESP_ERROR_CHECK(spi_device_polling_transmit(lcd->spi, &t));
+    spi_bus_all_cs_high();
 }
 
 static void lcd_send_data(lcd_t *lcd, const uint8_t *data, int len)
@@ -27,12 +29,14 @@ static void lcd_send_data(lcd_t *lcd, const uint8_t *data, int len)
     if (len == 0) return; // No need to send anything
     if (data == NULL) return; // No data to send
 
+    spi_bus_select_lcd();
     spi_transaction_t t =   {
         .length = len * 8, // Data length in bits
         .tx_buffer = data,
         .user = (void*) 1, // DC high for data
     };
     ESP_ERROR_CHECK(spi_device_polling_transmit(lcd->spi, &t));
+    spi_bus_all_cs_high();
 }
 
 static void lcd_set_window(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
@@ -119,7 +123,7 @@ void lcd_init(lcd_t *lcd, spi_host_device_t host)
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = 20 * 1000 * 1000, // 20 MHz
         .mode = 0, // SPI mode 0
-        .spics_io_num = SPI_LCD_CS_PIN, // CS pin
+        .spics_io_num = -1, // SPI_LCD_CS_PIN, control manually
         .queue_size = 7,
         .pre_cb = lcd_spi_pre_transfer, // DC pin callback
     };
@@ -172,6 +176,10 @@ void lcd_init(lcd_t *lcd, spi_host_device_t host)
 // ═══════════════════════════════════════════════════════
 void lcd_set_rotation(lcd_t *lcd, uint8_t rotation)
 {
+    /*  Lock SPI bus — prevent SD card from interrupting
+    For now, use portMAX_DELAY to keep simple coding. 
+    Upgrade later for timeout + error handling */
+    ESP_ERROR_CHECK(spi_device_acquire_bus(lcd->spi, portMAX_DELAY));
     lcd->rotation = rotation % 4;
 
     uint8_t madctl = 0;
@@ -203,6 +211,7 @@ void lcd_set_rotation(lcd_t *lcd, uint8_t rotation)
     }
     lcd_send_cmd(lcd, 0x36); // MADCTL
     lcd_send_data(lcd, &madctl, 1);
+    spi_device_release_bus(lcd->spi);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -210,6 +219,11 @@ void lcd_set_rotation(lcd_t *lcd, uint8_t rotation)
 // ═══════════════════════════════════════════════════════
 void lcd_fill_rect(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint32_t color)
 {
+    /*  Lock SPI bus — prevent SD card from interrupting
+    For now, use portMAX_DELAY to keep simple coding. 
+    Upgrade later for timeout + error handling */
+    ESP_ERROR_CHECK(spi_device_acquire_bus(lcd->spi, portMAX_DELAY));
+
     // Set the drawing window
     lcd_set_window(lcd, x1, y1, x2, y2);
     
@@ -243,8 +257,8 @@ void lcd_fill_rect(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y
     for (int y = 0; y < height; y++) {
         lcd_send_data(lcd, (uint8_t*)line_buf, width * 3);
     }
- 
     free(line_buf);
+    spi_device_release_bus(lcd->spi);
 }
 
 void lcd_fill_screen(lcd_t *lcd, uint32_t color)
@@ -252,13 +266,21 @@ void lcd_fill_screen(lcd_t *lcd, uint32_t color)
     lcd_fill_rect(lcd, 0, 0, lcd->width - 1, lcd->height - 1, color);
 }
 
-void lcd_draw_pixel(lcd_t *lcd, uint16_t x, uint16_t y, uint32_t color) //Need to check later, wrong function
+void lcd_draw_pixel(lcd_t *lcd, uint16_t x, uint16_t y, uint32_t color)
 {
-    lcd_set_window(lcd, x, y, x, y);
+    /*  Lock SPI bus — prevent SD card from interrupting
+    For now, use portMAX_DELAY to keep simple coding. 
+    Upgrade later for timeout + error handling */
+    ESP_ERROR_CHECK(spi_device_acquire_bus(lcd->spi, portMAX_DELAY));
 
-    // Send 2 bytes for 1 pixel (Big-endian)
-    // uint8_t data[2] = {(color >> 8) & 0xFF, color & 0xFF};
-    // lcd_send_data(lcd, data, 2);
+    lcd_set_window(lcd, x, y, x, y);
+    //Send 3 bytes for 1 pixel
+    uint8_t data[3];
+    data[0] = ((color >> 16) & 0xFF) & 0xFC; //RED
+    data[1] = ((color >> 8) & 0xFF) & 0xFC; //GREEN
+    data[2] = ((color >> 0) & 0xFF) & 0xFC; //BLUE
+    lcd_send_data(lcd, data, 3);
+    spi_device_release_bus(lcd->spi);
 }
 
 void lcd_draw_hline(lcd_t *lcd, uint16_t x, uint16_t y, uint16_t width, uint32_t color)

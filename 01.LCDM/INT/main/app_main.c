@@ -1,13 +1,19 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "lcd_driver.h" 
+#include "lcd_driver.h"
+#include "sd_card_driver.h"
+#include "spi_bus_manager.h"
+
+lcd_t lcd;
+// sd_card_t sd_card;
 
 void app_main(void)
 {
-    lcd_t lcd;
-
+    spi_bus_init(SPI2_HOST); // Initialize the shared SPI bus for both LCD and SD card
     lcd_init(&lcd, SPI2_HOST);
+    // sd_card_init(&sd_card, SPI2_HOST);
+
     printf("LCD initialized! Starting color test...\n");
 
     //Test: Cycle through colors
@@ -34,7 +40,7 @@ void app_main(void)
         {
             printf("Filling screen: %s\n", color_name[i]);
             lcd_fill_screen(&lcd, colors[i]);
-            vTaskDelay(pdMS_TO_TICKS(20));
+            vTaskDelay(pdMS_TO_TICKS(2000));
         }
 
         lcd_fill_rect(&lcd, 50, 50, 320 - 50, 480 - 50, COLOR_MAGENTA);

@@ -28,12 +28,13 @@ void sd_card_init(sd_card_t *sd, spi_host_device_t host)
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = 400 * 1000, //400Khz
         .mode = 0,
-        .spics_io_num = SPI_SD_CS_PIN,
+        .spics_io_num = -1,
         .queue_size = 7,
     };
     ESP_ERROR_CHECK(spi_bus_add_device(host, &devcfg, &sd->spi));
 
     // send 80 clock cycles while SD CS is still High level. This is the required "wake up/prepare" step before CMD0 
+    spi_bus_all_cs_high();
     for (int i = 0; i < 10; i++)
     {
         sd_card_spi_transfer_byte(sd, 0xFF);
