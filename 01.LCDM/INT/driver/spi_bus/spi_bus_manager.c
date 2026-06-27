@@ -20,3 +20,21 @@ void spi_bus_init(spi_host_device_t host)
     ESP_LOGI(TAG, "SPI bus initialized (MOSI=%d, MISO=%d, SCK=%d)",
     SPI_MOSI_PIN, SPI_MISO_PIN, SPI_SCK_PIN);
 }
+
+void spi_bus_all_cs_high(void)
+{
+    gpio_set_level(SPI_LCD_CS_PIN, 1);
+    gpio_set_level(SPI_SD_CS_PIN, 1);
+}
+
+void spi_bus_select_lcd(void)
+{
+    gpio_set_level(SPI_LCD_CS_PIN, 0);
+    gpio_set_level(SPI_SD_CS_PIN, 1);
+}
+
+void spi_bus_select_sd(void)
+{
+    gpio_set_level(SPI_LCD_CS_PIN, 1);
+    gpio_set_level(SPI_SD_CS_PIN, 0);
+}

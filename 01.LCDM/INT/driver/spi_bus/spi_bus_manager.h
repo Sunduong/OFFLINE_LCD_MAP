@@ -29,37 +29,7 @@
  * @param host SPI host to use (e.g. SPI2_HOST)
  */
 void spi_bus_init(spi_host_device_t host);
+void spi_bus_all_cs_high(void);
+void spi_bus_select_lcd(void);
+void spi_bus_select_sd(void);
 
-/**
- * @brief Acquire (lock) the SPI bus for exclusive access
- *
- * @param manager Pointer to manager structure
- * @param timeout Maximum time to wait (in FreeRTOS ticks)
- *                Use portMAX_DELAY for infinite wait (NOT recommended in production)
- *                Use pdMS_TO_TICKS(1000) for 1-second timeout (RECOMMENDED)
- *
- * @return pdTRUE if lock acquired within timeout
- *         pdFALSE if timeout expired (bus is held by another task)
- *
- * Usage:
- *     if (spi_bus_manager_acquire(&spi_manager, pdMS_TO_TICKS(1000)) == pdTRUE) {
- *         lcd_fill_screen(...);  // Safe SPI access
- *         spi_bus_manager_release(&spi_manager);
- *     } else {
- *         ESP_LOGE(TAG, "SPI bus timeout!");
- *     }
- */
-BaseType_t spi_bus_manager_acquire(spi_bus_manager_t *manager, TickType_t timeout);
-
-/**
- * @brief Release (unlock) the SPI bus for other tasks
- *
- * @param manager Pointer to manager structure
- *
- * CRITICAL: Always call this after you're done with SPI access!
- *           If you forget, other tasks will deadlock.
- *           In practice, use try-finally pattern or scope guards.
- */
-void spi_bus_manager_release(spi_bus_manager_t *manager);
-
-#endif // SPI_BUS_MANAGER_H

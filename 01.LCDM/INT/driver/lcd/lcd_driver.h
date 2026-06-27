@@ -1,4 +1,3 @@
-#include <stdint.h>
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "spi_bus_manager.h"
