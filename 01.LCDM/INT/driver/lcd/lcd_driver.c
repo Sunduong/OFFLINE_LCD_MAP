@@ -9,7 +9,7 @@ static const char *TAG = "LCD_DRIVER";
 static void lcd_spi_pre_transfer(spi_transaction_t *t)
 {
     int dc = (int) t->user;
-    gpio_set_level(LCD_DC_PIN, dc);
+    gpio_set_level(SPI_LCD_DC_PIN, dc);
 }
 
 static void lcd_send_cmd(lcd_t *lcd, uint8_t cmd)
@@ -23,7 +23,7 @@ static void lcd_send_cmd(lcd_t *lcd, uint8_t cmd)
 }
 
 static void lcd_send_data(lcd_t *lcd, const uint8_t *data, int len)
-    {
+{
     if (len == 0) return; // No need to send anything
     if (data == NULL) return; // No data to send
 
@@ -103,7 +103,7 @@ static void lcd_set_window(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, ui
 */
 void lcd_init(lcd_t *lcd, spi_host_device_t host)
 {
-    lcd->dc_pin = LCD_DC_PIN;
+    lcd->dc_pin = SPI_LCD_DC_PIN;
     lcd->rst_pin = LCD_RESET_PIN;
     lcd->width = LCD_WIDTH;
     lcd->height = LCD_HEIGHT;
@@ -115,63 +115,53 @@ void lcd_init(lcd_t *lcd, spi_host_device_t host)
     gpio_set_direction(lcd->dc_pin, GPIO_MODE_OUTPUT);
     gpio_set_direction(lcd->rst_pin, GPIO_MODE_OUTPUT);
 
-    // Initialize SPI bus
-    spi_bus_config_t buscfg = {
-        .mosi_io_num = LCD_MOSI_PIN,
-        .miso_io_num = -1,                  // Not used
-        .sclk_io_num = LCD_SCK_PIN,
-        .max_transfer_sz = SOC_SPI_MAXIMUM_BUFFER_SIZE,
-    };
-    ESP_ERROR_CHECK(spi_bus_initialize(host, &buscfg, SPI_DMA_CH_AUTO));
-    ESP_LOGI(TAG, "SPI bus initialized...");
-
     // Add LCD device on bus
     spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = 2 * 1000 * 1000, // 20 MHz
-        .mode = 0,                          // SPI mode 0
-        .spics_io_num = LCD_CS_PIN,         // CS pin
-        .queue_size = 7,                    // We want to be able to queue 7 transactions at a time
-        .pre_cb = lcd_spi_pre_transfer,     // DC pin callback
+        .clock_speed_hz = 20 * 1000 * 1000, // 20 MHz
+        .mode = 0, // SPI mode 0
+        .spics_io_num = SPI_LCD_CS_PIN, // CS pin
+        .queue_size = 7,
+        .pre_cb = lcd_spi_pre_transfer, // DC pin callback
     };
     ESP_ERROR_CHECK(spi_bus_add_device(host, &devcfg, &lcd->spi));
     ESP_LOGI(TAG, "LCD device added to SPI bus...");
 
     // Hardware reset
     gpio_set_level(lcd->rst_pin, 0);
-    vTaskDelay(pdMS_TO_TICKS(10));          // Hold reset low for 10ms
+    vTaskDelay(pdMS_TO_TICKS(10)); // Hold reset low for 10ms
     gpio_set_level(lcd->rst_pin, 1);
-    vTaskDelay(pdMS_TO_TICKS(100));         // Wait for LCD to reset
+    vTaskDelay(pdMS_TO_TICKS(100)); // Wait for LCD to reset
     ESP_LOGI(TAG, "LCD hardware reset complete...");
 
-    //Software reset
-    lcd_send_cmd(lcd, 0x01);                // SWRESET
-    vTaskDelay(pdMS_TO_TICKS(120));         // Wait for reset to complete
+    // Software reset
+    lcd_send_cmd(lcd, 0x01); // SWRESET
+    vTaskDelay(pdMS_TO_TICKS(120)); // Wait for reset to complete
     ESP_LOGI(TAG, "LCD software reset complete...");
 
     // Sleep out
-    lcd_send_cmd(lcd, 0x11);                // SLPOUT
-    vTaskDelay(pdMS_TO_TICKS(120));         // Wait for sleep out to complete
+    lcd_send_cmd(lcd, 0x11); // SLPOUT
+    vTaskDelay(pdMS_TO_TICKS(120)); // Wait for sleep out to complete
     ESP_LOGI(TAG, "LCD sleep out complete...");
 
     // Set color mode to RGB666
-    lcd_send_cmd(lcd, 0x3A);                // COLMOD
-    uint8_t pixel_format = 0x66;             // 18-bit RGB666
+    lcd_send_cmd(lcd, 0x3A); // COLMOD 
+    uint8_t pixel_format = 0x66; // 18-bit RGB666
     lcd_send_data(lcd, &pixel_format, 1);
     ESP_LOGI(TAG, "LCD color mode set to RGB666...");
 
     // Set rotation
-    lcd_send_cmd(lcd, 0x36);                // MADCTL
-    uint8_t madctl = 0x48;                  // Portrait, no any flips
+    lcd_send_cmd(lcd, 0x36); // MADCTL
+    uint8_t madctl = 0x00; // Portrait, no flips
     lcd_send_data(lcd, &madctl, 1);
     ESP_LOGI(TAG, "LCD rotation set to portrait...");
 
     // Normal display mode
-    lcd_send_cmd(lcd, 0x13);                // NORON
+    lcd_send_cmd(lcd, 0x13); // NORON
     ESP_LOGI(TAG, "LCD normal display mode set...");
 
     // Display on
-    lcd_send_cmd(lcd, 0x29);                // DISPON
-    vTaskDelay(pdMS_TO_TICKS(100));         // Wait for display to turn on
+    lcd_send_cmd(lcd, 0x29); // DISPON
+    vTaskDelay(pdMS_TO_TICKS(100)); // Wait for display to turn on
     ESP_LOGI(TAG, "LCD display turned on...");
 
     ESP_LOGI(TAG, "LCD initialization complete!");
@@ -262,13 +252,13 @@ void lcd_fill_screen(lcd_t *lcd, uint32_t color)
     lcd_fill_rect(lcd, 0, 0, lcd->width - 1, lcd->height - 1, color);
 }
 
-void lcd_draw_pixel(lcd_t *lcd, uint16_t x, uint16_t y, uint32_t color)
+void lcd_draw_pixel(lcd_t *lcd, uint16_t x, uint16_t y, uint32_t color) //Need to check later, wrong function
 {
     lcd_set_window(lcd, x, y, x, y);
 
     // Send 2 bytes for 1 pixel (Big-endian)
-    uint8_t data[2] = {(color >> 8) & 0xFF, color & 0xFF};
-    lcd_send_data(lcd, data, 2);
+    // uint8_t data[2] = {(color >> 8) & 0xFF, color & 0xFF};
+    // lcd_send_data(lcd, data, 2);
 }
 
 void lcd_draw_hline(lcd_t *lcd, uint16_t x, uint16_t y, uint16_t width, uint32_t color)

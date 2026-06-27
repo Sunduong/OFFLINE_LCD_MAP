@@ -1,18 +1,11 @@
 #include <stdint.h>
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
+#include "spi_bus_manager.h"
 
 // ──────────────────────────── Display Dimensions ────────────────────────────
 #define LCD_WIDTH               320
 #define LCD_HEIGHT              480
-
-// ──────────────────────────── SPI Pin Definitions ────────────────────────────
-#define LCD_MOSI_PIN            11
-#define LCD_MISO_PIN            12
-#define LCD_SCK_PIN             10
-#define LCD_CS_PIN              9
-#define LCD_DC_PIN              8
-#define LCD_RESET_PIN           7
 
 // ──────────────────────────── RGB Color hex codes - Use for RGB666 on module ────────────────────────────
 #define COLOR_BLACK             0x000000

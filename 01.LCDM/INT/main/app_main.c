@@ -34,9 +34,29 @@ void app_main(void)
         {
             printf("Filling screen: %s\n", color_name[i]);
             lcd_fill_screen(&lcd, colors[i]);
-            vTaskDelay(pdMS_TO_TICKS(1000));
+            vTaskDelay(pdMS_TO_TICKS(20));
         }
+
+        lcd_fill_rect(&lcd, 50, 50, 320 - 50, 480 - 50, COLOR_MAGENTA);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        lcd_fill_screen(&lcd, colors[7]);
         
+
+        lcd_draw_pixel(&lcd, 10, 300, COLOR_GREEN);
+        lcd_draw_pixel(&lcd, 11, 300, COLOR_GREEN);
+        lcd_draw_pixel(&lcd, 10, 301, COLOR_GREEN);
+        lcd_draw_pixel(&lcd, 11, 301, COLOR_GREEN);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        lcd_draw_hline(&lcd, 160/2, 240, 160, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        lcd_draw_vline(&lcd, 160, 240/2, 240, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        lcd_draw_rect(&lcd, 10, 10, 310, 470, COLOR_WHITE);
+        vTaskDelay(pdMS_TO_TICKS(10000));
+
     }
 }
 
