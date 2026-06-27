@@ -53,6 +53,15 @@ void app_main(void)
         lcd_draw_pixel(&lcd, 10, 301, COLOR_GREEN);
         lcd_draw_pixel(&lcd, 11, 301, COLOR_GREEN);
         vTaskDelay(pdMS_TO_TICKS(2000));
+        
+        lcd_draw_pixel(&lcd, 160, 240, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        lcd_draw_pixel(&lcd, 161, 240, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        lcd_draw_pixel(&lcd, 160, 241, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        lcd_draw_pixel(&lcd, 161, 241, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
 
         lcd_draw_hline(&lcd, 160/2, 240, 160, COLOR_YELLOW);
         vTaskDelay(pdMS_TO_TICKS(2000));

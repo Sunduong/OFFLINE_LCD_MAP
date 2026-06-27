@@ -155,7 +155,7 @@ void lcd_init(lcd_t *lcd, spi_host_device_t host)
 
     // Set rotation
     lcd_send_cmd(lcd, 0x36); // MADCTL
-    uint8_t madctl = 0x00; // Portrait, no flips
+    uint8_t madctl = 0x48; // Portrait, no flips
     lcd_send_data(lcd, &madctl, 1);
     ESP_LOGI(TAG, "LCD rotation set to portrait...");
 
