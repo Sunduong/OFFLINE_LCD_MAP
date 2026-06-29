@@ -6,18 +6,19 @@
 #include "spi_bus_manager.h"
 
 lcd_t lcd;
-// sd_card_t sd_card;
+sd_card_t sd_card;
 
 void app_main(void)
 {
     spi_bus_init(SPI2_HOST); // Initialize the shared SPI bus for both LCD and SD card
     lcd_init(&lcd, SPI2_HOST);
-    // sd_card_init(&sd_card, SPI2_HOST);
+    sd_card_init(&sd_card, SPI2_HOST);
 
     printf("LCD initialized! Starting color test...\n");
+    printf("SD Card initialized!\n");
 
     //Test: Cycle through colors
-    uint32_t colors[] = {
+     uint32_t colors[] = {
         COLOR_RED,
         COLOR_GREEN,
         COLOR_BLUE,
@@ -33,7 +34,6 @@ void app_main(void)
         "YELLOW", "CYAN", "MAGENTA",
         "WHITE", "BLACK"
     };
-    // lcd_fill_screen(&lcd, colors[0]);
     while(1)
     {
         for (int i = 0; i < (sizeof(colors) / sizeof(uint32_t)); i++)
@@ -71,7 +71,6 @@ void app_main(void)
 
         lcd_draw_rect(&lcd, 10, 10, 310, 470, COLOR_WHITE);
         vTaskDelay(pdMS_TO_TICKS(10000));
-
     }
 }
 

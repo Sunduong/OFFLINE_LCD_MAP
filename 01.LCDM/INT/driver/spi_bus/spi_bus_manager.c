@@ -10,6 +10,16 @@ void spi_bus_init(spi_host_device_t host)
 {
     ESP_LOGI(TAG, "Initializing shared SPI bus...");
 
+    gpio_config_t cs_cfg = {
+        .pin_bit_mask = (1ULL << SPI_LCD_CS_PIN) | (1ULL << SPI_SD_CS_PIN) | (1ULL << SPI_TOUCH_CS_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    ESP_ERROR_CHECK(gpio_config(&cs_cfg));
+    spi_bus_all_cs_high();
+
     spi_bus_config_t buscfg = {
         .mosi_io_num = SPI_MOSI_PIN,
         .miso_io_num = SPI_MISO_PIN, // MISO required for SD card reads!

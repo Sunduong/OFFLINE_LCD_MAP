@@ -4,6 +4,13 @@
 #include "driver/spi_master.h"
 #include "spi_bus_manager.h"
 
+// ──────────────────────────── SD Card Command Definitions ────────────────────────────
+#define SD_CMD0 0   // GO_IDLE_STATE
+#define SD_CMD8 8   // SEND_IF_COND
+
+#define SD_CMD0_CRC 0x95
+#define CMD8_CRC    0x87
+
 // ──────────────────────────── SD Card Device Structure ────────────────────────────
 typedef struct {
     spi_device_handle_t spi;    //SPI device handle for SD card

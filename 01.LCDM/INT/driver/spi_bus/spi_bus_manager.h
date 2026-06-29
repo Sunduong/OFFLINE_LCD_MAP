@@ -7,17 +7,18 @@
 
 // ──────────────────────────── Shared SPI Bus Pin Definitions ────────────────────────────
 // These pins are SHARED by LCD and SD card on the same SPI2 bus
-#define SPI_MOSI_PIN 11
-#define SPI_MISO_PIN 12
-#define SPI_SCK_PIN 10
+#define SPI_MOSI_PIN 11     //Channel 2 of Logic Analyzer
+#define SPI_MISO_PIN 12     //Channel 5 of Logic Analyzer
+#define SPI_SCK_PIN 10      //Channel 0 of Logic Analyzer
 
 // ──────────────────────────── Device CS Pin Definitions ────────────────────────────
-#define SPI_LCD_CS_PIN 9
-#define SPI_SD_CS_PIN 13
+#define SPI_LCD_CS_PIN      9       //Channel 1 of Logic Analyzer
+#define SPI_SD_CS_PIN       13      //Channel 4 of Logic Analyzer
+#define SPI_TOUCH_CS_PIN    14      
 
 // ──────────────────────────── LCD-specific Pins ────────────────────────────
-#define SPI_LCD_DC_PIN 8
-#define LCD_RESET_PIN 7
+#define SPI_LCD_DC_PIN      8    //Channel 3 of Logic Analyzer
+#define LCD_RESET_PIN       7
 
 // ──────────────────────────── Public API ────────────────────────────
 
