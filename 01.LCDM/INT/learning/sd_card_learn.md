@@ -392,3 +392,160 @@ Success means:
 - The driver logs whether the card is SDHC/SDXC.
 
 After that, the next step is `sd_read_sector(0, buffer)` and printing the first bytes.
+
+# SD Card Knowledge Plan - Using VFS Library
+
+# Chat 1
+
+## 🧑‍🏫 Thầy khen em đã nhận ra điều này — Đó là dấu hiệu của developer giỏi
+
+**Biết mình chưa hiểu = quan trọng hơn là giả vờ hiểu.**
+
+Em ĐÚNG. Code tôi viết dùng nhiều API mà em chưa từng thấy:
+- `SDSPI_HOST_DEFAULT()`, `SDSPI_DEVICE_CONFIG_DEFAULT()` — macro gì?
+- `esp_vfs_fat_sdspi_mount()` — 5 tham số, mỗi tham số ý nghĩa gì?
+- `sdmmc_card_t`, `sdmmc_host_t`, `sdspi_device_config_t` — struct nào cho việc gì?
+
+→ Nếu không hiểu các struct/macro này, em chỉ đang **copy-paste**, không phải **code**.
+
+---
+
+## 📚 Kế hoạch học: ESP-IDF SD Card Examples
+
+### Bước 1: Tìm examples trong ESP-IDF
+
+ESP-IDF có sẵn examples. Mở terminal:
+
+```bash
+# Tìm thư mục examples của ESP-IDF
+# Thường ở: %USERPROFILE%\esp\esp-idf\examples\storage\sd_card
+```
+
+Có 2 examples quan trọng:
+```
+esp-idf/examples/storage/sd_card/        ← SPI mode (CẦN XEM)
+esp-idf/examples/storage/sdmmc/          ← SDMMC mode (1-bit/4-bit, skip)
+```
+
+### Bước 2: Đọc theo thứ tự này
+
+```
+1. sd_card/README.md          ← Hiểu tổng quan
+2. sd_card/main/sd_card_example_main.c  ← Đọc từng dòng
+3. sd_card/CMakeLists.txt     ← Hiểu component dependencies
+4. sd_card/sdkconfig.defaults ← Hiểu config cần bật
+```
+
+### Bước 3: Khi đọc example, trả lời các câu hỏi:
+
+> **Q1**: Example gọi `spi_bus_initialize()` không? Hay để `esp_vfs_fat_sdspi_mount()` tự làm?
+>
+> **Q2**: `SDSPI_HOST_DEFAULT()` expand ra struct gì? (Hint: click vào nó trong VS Code)
+>
+> **Q3**: `SDSPI_DEVICE_CONFIG_DEFAULT()` set `gpio_cs` = gì mặc định?
+>
+> **Q4**: Example có dùng `spi_bus_add_device()` thủ công không?
+>
+> **Q5**: `esp_vfs_fat_sdmmc_mount_config_t` có field nào? Ý nghĩa mỗi field?
+
+### Bước 4: Chạy example trên board thật
+
+```
+- Copy example ra chỗ khác
+- Sửa pin definitions cho đúng board em
+- idf.py build flash monitor
+- Thấy log: "SD card mounted, size = XXX MB"
+- → Lúc này em ĐÃ HIỂU flow thực tế
+```
+
+### Bước 5: Quay lại code của mình
+
+Sau khi hiểu example, quay lại đọc `sd_card_driver.c` tôi viết:
+- Em sẽ thấy code tôi viết = example + shared bus adaptation
+- Lúc đó code sẽ có ý nghĩa, không phải "phép thuật"
+
+---
+
+## 🎯 Tóm tắt
+
+```
+Bây giờ:    ❌ Không hiểu code → copy-paste → không học được gì
+Học example: ✅ Hiểu từng API → biết struct nào làm gì
+Quay lại:    ✅ Code có ý nghĩa → tự debug được → tự viết được
+```
+
+**Đi đọc example đi. Khi nào hiểu example, quay lại báo thầy.** 🧑‍🏫
+
+# Chat 2
+
+## 🗺️ Lộ trình tiếp theo — Từ hiểu example đến hoàn thành Phase 2.2
+
+### Giai đoạn 1: HỌC (Hiểu ESP-IDF SD card API)
+```
+1. Mở esp-idf/examples/storage/sd_card/
+2. Đọc README.md
+3. Đọc sd_card_example_main.c từng dòng
+4. Trả lời 5 câu hỏi thầy đưa ở trên
+5. Chạy example trên board thật (sửa pin cho đúng)
+6. Thấy log: "SD card mounted, size = XXX MB"
+```
+→ **Mục tiêu**: Hiểu `esp_vfs_fat_sdspi_mount()` làm gì, struct nào cần gì
+
+### Giai đoạn 2: ÁP DỤNG (Quay lại code của mình)
+```
+1. Đọc lại sd_card_driver.c thầy viết
+2. Hiểu tại sao bỏ spi_bus_add_device()
+3. Hiểu tại sao malloc card info
+4. Sửa 3 bug trong lcd_driver.c:
+   - Bug #1: Deadlock khi malloc fail (THIẾT MẠNG!)
+   - Bug #2: COLMOD comment (0x55 → 0x66)
+   - Bug #3: MADCTL inconsistency (0x48 vs 0x00)
+5. Tạo main/CMakeLists.txt
+6. Thêm sdkconfig.defaults: CONFIG_FATFS_SUPPORT_FATFS=y
+```
+→ **Mục tiêu**: Code compile + LCD vẫn hoạt động + SD card mount thành công
+
+### Giai đoạn 3: TEST (Bước 4-5 trong lesson)
+```
+1. Tạo file test.txt trên SD card
+2. Gọi sd_card_read_file() trong app_main()
+3. Thấy log: nội dung file
+4. Tạo 2 task: LCD task + SD task
+5. LCD nhấp nháy màu + SD đọc file cùng lúc
+6. LCD KHÔNG bị giật/lag
+```
+→ **Mục tiêu**: 2 device chia sẻ SPI bus, hoạt động song song
+
+### Giai đoạn 4: ỨNG DỤNG (Bước 6 trong lesson)
+```
+1. Tạo file test.rgb565 (ảnh gradient) bằng Python script
+2. Đọc ảnh từ SD card
+3. Hiển thị lên LCD
+4. Ảnh không bị nhiễu, không lệch màu
+```
+→ **Mục tiêu**: Đọc file ảnh từ SD → hiển thị lên LCD
+
+### Giai đoạn 5: KIỂM TRA CUỐI PHASE
+```
+Trả lời 5 câu kiểm tra trong lesson:
+1. SPI Bus Sharing — khi LCD đang gửi, SD chen vào thì sao?
+2. acquire_bus vs Mutex — tại sao dùng acquire_bus?
+3. Task Priority — đổi priority thì LCD có giật không?
+4. Starvation — LCD không delay thì SD có chạy được không?
+5. Real-world — tại sao dùng timeout thay vì portMAX_DELAY?
+```
+→ **Mục tiêu**: Hiểu sâu enough để giải thích cho người khác
+
+---
+
+## ⏰ Bắt đầu từ đâu NGAY BÂY GIỜ?
+
+**Bước đầu tiên**: Mở terminal, tìm ESP-IDF examples:
+
+```bash
+dir "%USERPROFILE%\esp\esp-idf\examples\storage\sd_card"
+```
+
+Đọc file `sd_card_example_main.c`. Gặp gì không hiểu, hỏi thầy. 🧑‍🏫
+
+
