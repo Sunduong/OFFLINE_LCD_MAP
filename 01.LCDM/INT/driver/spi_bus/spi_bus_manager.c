@@ -10,40 +10,13 @@ void spi_bus_init(spi_host_device_t host)
 {
     ESP_LOGI(TAG, "Initializing shared SPI bus...");
 
-    gpio_config_t cs_cfg = {
-        .pin_bit_mask = (1ULL << SPI_LCD_CS_PIN) | (1ULL << SPI_SD_CS_PIN) | (1ULL << SPI_TOUCH_CS_PIN),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
-    ESP_ERROR_CHECK(gpio_config(&cs_cfg));
-    spi_bus_all_cs_high();
-
     spi_bus_config_t buscfg = {
-        .mosi_io_num = SPI_MOSI_PIN,
-        .miso_io_num = SPI_MISO_PIN, // MISO required for SD card reads!
-        .sclk_io_num = SPI_SCK_PIN,
+        .mosi_io_num     = SPI_MOSI_PIN,
+        .miso_io_num     = SPI_MISO_PIN,   // MISO required for SD card reads!
+        .sclk_io_num     = SPI_SCK_PIN,
         .max_transfer_sz = SOC_SPI_MAXIMUM_BUFFER_SIZE,
     };
     ESP_ERROR_CHECK(spi_bus_initialize(host, &buscfg, SPI_DMA_CH_AUTO));
-    ESP_LOGI(TAG, "SPI bus initialized (MOSI=%d, MISO=%d, SCK=%d)", SPI_MOSI_PIN, SPI_MISO_PIN, SPI_SCK_PIN);
-}
-
-void spi_bus_all_cs_high(void)
-{
-    gpio_set_level(SPI_LCD_CS_PIN, 1);
-    gpio_set_level(SPI_SD_CS_PIN, 1);
-}
-
-void spi_bus_select_lcd(void)
-{
-    gpio_set_level(SPI_LCD_CS_PIN, 0);
-    gpio_set_level(SPI_SD_CS_PIN, 1);
-}
-
-void spi_bus_select_sd(void)
-{
-    gpio_set_level(SPI_LCD_CS_PIN, 1);
-    gpio_set_level(SPI_SD_CS_PIN, 0);
+    ESP_LOGI(TAG, "SPI bus initialized (MOSI=%d, MISO=%d, SCK=%d)",
+             SPI_MOSI_PIN, SPI_MISO_PIN, SPI_SCK_PIN);
 }
