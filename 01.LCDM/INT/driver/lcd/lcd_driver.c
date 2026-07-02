@@ -14,14 +14,12 @@ static void lcd_spi_pre_transfer(spi_transaction_t *t)
 
 static void lcd_send_cmd(lcd_t *lcd, uint8_t cmd)
 {
-    spi_bus_select_lcd();
     spi_transaction_t t = {
         .length = 8, // Command is 1 byte
         .tx_buffer = &cmd,
         .user = (void*) 0, // DC low for command
     };
     ESP_ERROR_CHECK(spi_device_polling_transmit(lcd->spi, &t));
-    spi_bus_all_cs_high();
 }
 
 static void lcd_send_data(lcd_t *lcd, const uint8_t *data, int len)
@@ -29,14 +27,12 @@ static void lcd_send_data(lcd_t *lcd, const uint8_t *data, int len)
     if (len == 0) return; // No need to send anything
     if (data == NULL) return; // No data to send
 
-    spi_bus_select_lcd();
     spi_transaction_t t =   {
         .length = len * 8, // Data length in bits
         .tx_buffer = data,
         .user = (void*) 1, // DC high for data
     };
     ESP_ERROR_CHECK(spi_device_polling_transmit(lcd->spi, &t));
-    spi_bus_all_cs_high();
 }
 
 static void lcd_set_window(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
@@ -123,7 +119,7 @@ void lcd_init(lcd_t *lcd, spi_host_device_t host)
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = 20 * 1000 * 1000, // 20 MHz
         .mode = 0, // SPI mode 0
-        .spics_io_num = -1, // SPI_LCD_CS_PIN, control manually
+        .spics_io_num = SPI_LCD_CS_PIN, // SPI_LCD_CS_PIN, control manually
         .queue_size = 7,
         .pre_cb = lcd_spi_pre_transfer, // DC pin callback
     };

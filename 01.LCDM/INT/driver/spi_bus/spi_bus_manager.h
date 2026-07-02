@@ -7,9 +7,9 @@
 
 // ──────────────────────────── Shared SPI Bus Pin Definitions ────────────────────────────
 // These pins are SHARED by LCD and SD card on the same SPI2 bus
-#define SPI_MOSI_PIN 11     //Channel 2 of Logic Analyzer
-#define SPI_MISO_PIN 12     //Channel 5 of Logic Analyzer
-#define SPI_SCK_PIN 10      //Channel 0 of Logic Analyzer
+#define SPI_MOSI_PIN        11     //Channel 2 of Logic Analyzer
+#define SPI_MISO_PIN        12     //Channel 5 of Logic Analyzer
+#define SPI_SCK_PIN         10      //Channel 0 of Logic Analyzer
 
 // ──────────────────────────── Device CS Pin Definitions ────────────────────────────
 #define SPI_LCD_CS_PIN      9       //Channel 1 of Logic Analyzer
