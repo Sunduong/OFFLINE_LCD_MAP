@@ -405,3 +405,156 @@ typedef struct {
 5. **Test GPS** module with serial output
 
 Let me know when you're ready to start, and I'll help you set up the initial project structure!
+
+
+
+Status Update
+
+## 🖼️ Hiển thị ảnh .jpg từ SD card lên LCD — Cách làm
+
+Đây là bước chuyển từ "vẽ màu" sang "hiển thị ảnh thật". Có 2 phần:
+
+---
+
+### 📐 Kiến trúc tổng quan
+
+```
+SD Card          RAM (PSRAM)           LCD
+┌──────────┐    ┌──────────────┐    ┌──────────┐
+│ image.jpg│──→│ JPEG Decoder │──→│ LCD SPI  │
+│ (compressed)│ │ (tjpgd)     │   │ (RGB666) │
+└──────────┘    │ → RGB888    │   └──────────┘
+                │ → RGB666    │
+                └──────────────┘
+```
+
+**3 bước:**
+1. Đọc file `.jpg` từ SD card vào RAM
+2. **Decode JPEG** → pixel data (RGB888 → RGB666)
+3. Gửi pixel data lên LCD qua SPI
+
+---
+
+### 🔑 Thách thức lớn nhất: RAM
+
+```
+Ảnh 320×480 pixel:
+  - RGB666: 320 × 480 × 3 bytes = 460,800 bytes (~450KB)
+  - ESP32-S3 SRAM: ~512KB → KHÔNG ĐỦ!
+  - ESP32-S3 PSRAM: 2-8MB → ĐỦ!
+
+→ Phải dùng PSRAM (heap_caps_malloc với MALLOC_CAP_SPIRAM)
+→ Hoặc decode từng dòng (line-by-line) để tiết kiệm RAM
+```
+
+---
+
+### 📚 Thư viện JPEG decode cho ESP-IDF
+
+Có 2 lựa chọn:
+
+| Thư viện | Ưu điểm | Nhược điểm |
+|----------|---------|------------|
+| **`tjpgd`** (Tiny JPEG Decoder) | Nhẹ (~6KB), decode line-by-line, có sẵn trong ESP-IDF | Chỉ hỗ trợ JPEG baseline |
+| **`esp_jpeg`** (ESP-IDF component) | Hỗ trợ nhiều format, tối ưu cho ESP32 | Lớn hơn, cần thêm component |
+
+**Thầy khuyên `tjpgd`** vì:
+- Có sẵn trong ESP-IDF (`components/` hoặc IDF component registry)
+- Decode line-by-line → tiết kiệm RAM (chỉ cần 1 dòng buffer)
+- Đã được dùng trong ESP-IDF `lcd_jpeg` example
+
+---
+
+### 📋 Các bước cần làm
+
+#### Bước 1: Thêm `tjpgd` component
+```
+# Trong idf_component.yml hoặc CMakeLists.txt
+idf.py add-dependency "espressif/tjpgd"
+```
+
+Hoặc copy `tjpgd` source vào project (2 file: `tjpgd.c` + `tjpgd.h`).
+
+#### Bước 2: Cấu hình PSRAM
+```
+# sdkconfig.defaults
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_USE_MALLOC=y
+```
+
+#### Bước 3: Flow decode JPEG → LCD
+
+```c
+#include "tjpgd.h"
+
+// tjpgd cần input function (đọc data từ buffer)
+static uint16_t tjpgd_data_in(JDEC *jd, uint8_t *buf, uint16_t nbytes) {
+    // Copy nbytes từ JPEG buffer vào buf
+    memcpy(buf, jpeg_data + jd->device_ptr, nbytes);
+    jd->device_ptr += nbytes;
+    return nbytes;
+}
+
+// tjpgd cần output function (nhận pixel data đã decode)
+static uint16_t tjpgd_data_out(JDEC *jd, void *bitmap, JRECT *rect) {
+    // bitmap = 1 dòng pixel RGB888
+    // rect = tọa độ vùng pixel
+    
+    // Convert RGB888 → RGB666
+    uint8_t *src = (uint8_t *)bitmap;
+    uint8_t *line_buf = heap_caps_malloc(width * 3, MALLOC_CAP_DMA);
+    
+    for (int i = 0; i < width; i++) {
+        line_buf[i * 3 + 0] = src[i * 3 + 0] & 0xFC;  // R
+        line_buf[i * 3 + 1] = src[i * 3 + 1] & 0xFC;  // G
+        line_buf[i * 3 + 2] = src[i * 3 + 2] & 0xFC;  // B
+    }
+    
+    // Gửi lên LCD
+    lcd_send_data(&lcd, line_buf, width * 3);
+    free(line_buf);
+    
+    return 1;  // Success
+}
+
+void display_jpeg(const char *path) {
+    // 1. Đọc JPEG file từ SD card
+    uint8_t *jpeg_data = malloc(file_size);
+    sd_card_read_file(&sd_card, path, jpeg_data, file_size);
+    
+    // 2. Decode JPEG → gửi từng dòng lên LCD
+    JDEC jd;
+    jd.device_ptr = 0;  // Offset trong jpeg_data
+    
+    // Acquire SPI bus cho toàn bộ thao tác
+    spi_device_acquire_bus(lcd.spi, portMAX_DELAY);
+    lcd_set_window(&lcd, 0, 0, 319, 479);  // Full screen
+    
+    // tjpgd tự gọi tjpgd_data_out cho mỗi dòng
+    jd_decomp(&jd, tjpgd_data_out, 0);
+    
+    spi_device_release_bus(lcd.spi);
+    free(jpeg_data);
+}
+```
+
+---
+
+### ⚠️ Lưu ý quan trọng
+
+1. **Kích thước ảnh phải đúng 320×480** (hoặc nhỏ hơn) — tjpgd không resize
+2. **JPEG phải là baseline** (không progressive)
+3. **Cần PSRAM** — ảnh decode cần nhiều RAM
+4. **RGB888 → RGB666**: mask mỗi byte với `& 0xFC`
+5. **Acquire bus** cho toàn bộ quá trình decode + gửi — tránh SD task chen ngang
+
+---
+
+### 🎯 Bước tiếp theo
+
+Em muốn:
+1. **Thầy hướng dẫn setup `tjpgd` + code đầy đủ?** (cần thêm component + PSRAM config)
+2. **Hay tự đọc ESP-IDF `lcd_jpeg` example trước?** (có sẵn trong `esp-idf/examples/peripherals/lcd/jpeg/`)
+
+**Thầy khuyên đọc example trước** — giống như SD card, hiểu example rồi mới code. 🖼️
+
