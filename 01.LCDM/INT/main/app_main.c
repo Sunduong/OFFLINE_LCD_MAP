@@ -10,36 +10,97 @@ static const char *TAG = "APP_MAIN";
 lcd_t lcd;
 sd_card_t sd_card;
 
+void vTaskLCD(void *pvParameters)
+{
+    //Test: Cycle through colors
+    uint32_t colors[] = {
+        COLOR_RED,
+        COLOR_GREEN,
+        COLOR_BLUE,
+        COLOR_YELLOW,
+        COLOR_CYAN,
+        COLOR_MAGENTA,
+        COLOR_WHITE,
+        COLOR_BLACK
+    };
+
+    const char *color_name[] = {
+        "RED", "GREEN", "BLUE",
+        "YELLOW", "CYAN", "MAGENTA",
+        "WHITE", "BLACK"
+    };
+
+    while(1)
+    {
+        for (int i = 0; i < (sizeof(colors) / sizeof(uint32_t)); i++)
+        {
+            printf("Filling screen: %s\n", color_name[i]);
+            lcd_fill_screen(&lcd, colors[i]);
+            vTaskDelay(pdMS_TO_TICKS(2000));
+        }
+
+        lcd_fill_rect(&lcd, 50, 50, 320 - 50, 480 - 50, COLOR_MAGENTA);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        lcd_fill_screen(&lcd, colors[7]);
+
+
+        lcd_draw_pixel(&lcd, 10, 300, COLOR_GREEN);
+        lcd_draw_pixel(&lcd, 11, 300, COLOR_GREEN);
+        lcd_draw_pixel(&lcd, 10, 301, COLOR_GREEN);
+        lcd_draw_pixel(&lcd, 11, 301, COLOR_GREEN);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        
+        lcd_draw_pixel(&lcd, 160, 240, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        lcd_draw_pixel(&lcd, 161, 240, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        lcd_draw_pixel(&lcd, 160, 241, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        lcd_draw_pixel(&lcd, 161, 241, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        lcd_draw_hline(&lcd, 160/2, 240, 160, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        lcd_draw_vline(&lcd, 160, 240/2, 240, COLOR_YELLOW);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        lcd_draw_rect(&lcd, 10, 10, 310, 470, COLOR_WHITE);
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
+
+void vTaskSDCard(void *pvParameters)
+{
+    uint8_t buffer[512];
+    while(1)
+    {
+        if (sd_card_is_mounted(&sd_card))
+        {
+            int len = sd_card_read_file(&sd_card, "/sdcard/Nihao.txt", buffer, sizeof(buffer) - 1);
+            if (len > 0)
+            {
+                buffer[len] = '\0';
+                ESP_LOGI(TAG, "File content: %s", buffer);
+            }
+            sd_card_list_dir(&sd_card, "/sdcard");
+        }
+        vTaskDelay(pdMS_TO_TICKS(3000));
+    }
+}
+
 void app_main(void)
 {
     spi_bus_init(SPI2_HOST); // Initialize the shared SPI bus for both LCD and SD card
     ESP_LOGI(TAG, "SPI Shared Bus initialized!");
+
     lcd_init(&lcd, SPI2_HOST);
     ESP_LOGI(TAG, "LCD initialized!");
 
-    if (sd_card_is_mounted(&sd_card)) {
-        ESP_LOGI(TAG, "SD card already mounted");
-    } else {
-        ESP_LOGI(TAG, "SD card not mounted, initializing...");
-    }
     sd_card_init(&sd_card, SPI2_HOST);
     ESP_LOGI(TAG, "SD Card initialized!");
 
-    uint8_t buffer[512];
-    int len = sd_card_read_file(&sd_card, "/sdcard/Nihao.txt", buffer, sizeof(buffer));
-    if (len > 0) 
-    {
-        for (int i = 0; i < len; i++)
-        {
-            ESP_LOGI(TAG, "Byte %d = 0x%02X ('%c)", 
-                        i, 
-                        buffer[i], 
-                        (buffer[i] >= 32 && buffer[i] <= 126) ? buffer[i] : '.'
-                    );
-        }
-    }
-
-    sd_card_list_dir(&sd_card, "/sdcard");
-
+    //vTaskLCD has higher priority than other tasks
+    xTaskCreate(vTaskLCD, "LCD Task", 4096 * 2, NULL, 4, NULL);
+    xTaskCreate(vTaskSDCard, "SD Card Task", 4096 * 2, NULL, 2, NULL);
 }
-
