@@ -1,14 +1,18 @@
 #include <stdio.h>
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lcd_driver.h"
 #include "sd_card_driver.h"
 #include "spi_bus_manager.h"
+#include "button_driver.h"
+#include "board_config.h"
 
 static const char *TAG = "APP_MAIN";
 
 lcd_t lcd;
 sd_card_t sd_card;
+button_driver_t button[BUTTON_MAX];
 
 void vTaskLCD(void *pvParameters)
 {
@@ -89,6 +93,41 @@ void vTaskSDCard(void *pvParameters)
     }
 }
 
+static const char *button_name(button_id_t id)
+{
+    switch (id)
+    {
+        case BUTTON_UP:
+            return "UP";
+        case BUTTON_DOWN:
+            return "DOWN";
+        case BUTTON_SELECT:
+            return "SELECT";
+        case BUTTON_BACK:
+            return "BACK";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+void vTaskButton(void *pvParameters)
+{
+    button_event_t event;
+
+    while(1)
+    {
+        for (button_id_t id = BUTTON_UP; id < BUTTON_MAX; id++)
+        {
+            if (button_driver_get_event(&button[id], &event, 0))
+            {
+                const char *event_name = (event == BUTTON_EVENT_LONG_PRESS) ? "LONG PRESS" : "SHORT PRESS";
+                ESP_LOGI(TAG, "Button %s - Type: %s", button_name(id), event_name);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
 void app_main(void)
 {
     spi_bus_init(SPI2_HOST); // Initialize the shared SPI bus for both LCD and SD card
@@ -100,7 +139,13 @@ void app_main(void)
     sd_card_init(&sd_card, SPI2_HOST);
     ESP_LOGI(TAG, "SD Card initialized!");
 
+    for (int i = 0; i < BUTTON_MAX; i++)
+    {
+        button_driver_init(&button[i], button_pins[i], NULL, 0, 0);
+    }
+
     //vTaskLCD has higher priority than other tasks
     xTaskCreate(vTaskLCD, "LCD Task", 4096 * 2, NULL, 4, NULL);
     xTaskCreate(vTaskSDCard, "SD Card Task", 4096 * 2, NULL, 2, NULL);
+    xTaskCreate(vTaskButton, "Button Task", 4096 * 2, NULL, 3, NULL);
 }

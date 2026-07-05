@@ -8,12 +8,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Default button configuration
-#define BUTTON_UP_PIN       GPIO_NUM_35
-#define BUTTON_DOWN_PIN     GPIO_NUM_36
-#define BUTTON_SELECT_PIN   GPIO_NUM_37
-#define BUTTON_BACK_PIN     GPIO_NUM_38
-
 #define BUTTON_DEBOUNCE_MS      30U
 #define BUTTON_LONG_PRESS_MS    1000U
 
@@ -40,6 +34,8 @@ typedef struct {
     bool initialized;
     bool owns_event_queue;
     bool is_pressed;
+    bool active_low;
+    TickType_t press_start_tick;
     TickType_t last_transition_tick;
 } button_driver_t;
 

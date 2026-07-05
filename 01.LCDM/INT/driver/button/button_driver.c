@@ -18,7 +18,7 @@ static void IRAM_ATTR button_isr_handler(void *arg)
         return;
     }
 
-    raw_event.pressed = (gpio_get_level(btn->pin) == 0); // Assuming active low button
+    raw_event.pressed = (gpio_get_level(btn->pin) == (btn->active_low ? 0 : 1));
     raw_event.tick = xTaskGetTickCountFromISR();
 
     xQueueSendFromISR(btn->raw_queue, &raw_event, &higher_priority_task_woken);
@@ -36,43 +36,43 @@ static void button_task(void *arg)
         {
             continue;
         }
+
         vTaskDelay(pdMS_TO_TICKS(20));
 
-        bool current_level = (gpio_get_level(btn->pin) == 0);
+        bool current_level = (gpio_get_level(btn->pin) == (btn->active_low ? 0 : 1));
         if (current_level != raw_event.pressed)
         {
-            continue; // Ignore if the state has changed during debounce delay
+            continue;
         }
 
         TickType_t now = xTaskGetTickCount();
         if ((now - btn->last_transition_tick) < pdMS_TO_TICKS(btn->debounce_ms))
         {
-            continue; // Ignore if within debounce period
+            continue;
         }
         btn->last_transition_tick = now;
 
         if (raw_event.pressed)
         {
+            if (btn->is_pressed)
+            {
+                continue;
+            }
+
             btn->is_pressed = true;
-
-            button_raw_event_t release_event;
-            BaseType_t got_release = xQueueReceive(btn->raw_queue, &release_event, pdMS_TO_TICKS(btn->long_press_ms));
-            if (got_release == pdTRUE && !release_event.pressed)
-            {
-                button_event_t event = ((release_event.tick - raw_event.tick) >= pdMS_TO_TICKS(btn->long_press_ms)) ? BUTTON_EVENT_LONG_PRESS : BUTTON_EVENT_SHORT_PRESS;
-                xQueueSend(btn->event_queue, &event, portMAX_DELAY);
-            }
-            else if (got_release != pdTRUE) // Timeout, treat as long press
-            {
-                button_event_t event = BUTTON_EVENT_LONG_PRESS;
-                xQueueSend(btn->event_queue, &event, portMAX_DELAY);
-            }
-
-            btn->is_pressed = false;
+            btn->press_start_tick = raw_event.tick;
         }
         else
         {
+            if (!btn->is_pressed)
+            {
+                continue;
+            }
+
             btn->is_pressed = false;
+            TickType_t duration = now - btn->press_start_tick;
+            button_event_t event = (duration >= pdMS_TO_TICKS(btn->long_press_ms)) ? BUTTON_EVENT_LONG_PRESS : BUTTON_EVENT_SHORT_PRESS;
+            xQueueSend(btn->event_queue, &event, portMAX_DELAY);
         }
     }
 }
@@ -93,6 +93,7 @@ esp_err_t button_driver_init(button_driver_t *btn, gpio_num_t pin, QueueHandle_t
     btn->pin = pin;
     btn->debounce_ms = (debounce_ms > 0) ? debounce_ms : BUTTON_DEBOUNCE_MS;
     btn->long_press_ms = (long_press_ms > 0) ? long_press_ms : BUTTON_LONG_PRESS_MS;
+    btn->active_low = true;
     btn->last_transition_tick = 0;
 
     btn->raw_queue = xQueueCreate(10, sizeof(button_raw_event_t));
