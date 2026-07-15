@@ -7,6 +7,8 @@
 #include "spi_bus_manager.h"
 #include "button_driver.h"
 #include "board_config.h"
+#include "gps_driver.h"
+#include "compass_driver.h"
 
 static const char *TAG = "APP_MAIN";
 
@@ -128,8 +130,40 @@ void vTaskButton(void *pvParameters)
     }
 }
 
+void vTaskGPS(void *pvParameters)
+{
+    gps_data_t gps_data;
+    while (1)
+    {
+        if (gps_driver_get_data(&gps_data))
+        {
+        ESP_LOGI(TAG, "GPS: lat = %.6f lon = %.6f speed = %.1fkm/h heading = %.1f° sats = %d fix %s",
+        gps_data.latitude, gps_data.longitude,
+        gps_data.speed_kmh, gps_data.heading,
+        gps_data.satellites, gps_data.fix_valid ? "YES" : "NO");
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Update GPS Log after 1 second
+    }
+}
+
+void vTaskCompass(void *pvParameters)
+{
+    compass_data_t compass_data;
+    while (1)
+    {
+        if (compass_driver_get_data(&compass_data))
+        {
+            ESP_LOGI(TAG, "Compass: heading = %.1f° raw = (%d, %d, %d) cal = %s",
+            compass_data.heading, compass_data.raw_x, compass_data.raw_y, compass_data.raw_z,
+            compass_data.data_uploaded ? "YES" : "NO");
+        }
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+}
+
 void app_main(void)
 {
+    esp_err_t err;
     spi_bus_init(SPI2_HOST); // Initialize the shared SPI bus for both LCD and SD card
     ESP_LOGI(TAG, "SPI Shared Bus initialized!");
 
@@ -143,9 +177,31 @@ void app_main(void)
     {
         button_driver_init(&button[i], button_pins[i], NULL, 0, 0);
     }
+    
+    err = gps_driver_init();
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "GPS initialized failed");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "GPS initialized!");
+    }
+
+    err = compass_driver_init();
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Compass initialized failed");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Compass initialized!");
+    }
 
     //vTaskLCD has higher priority than other tasks
     xTaskCreate(vTaskLCD, "LCD Task", 4096 * 2, NULL, 4, NULL);
     xTaskCreate(vTaskSDCard, "SD Card Task", 4096 * 2, NULL, 2, NULL);
     xTaskCreate(vTaskButton, "Button Task", 4096 * 2, NULL, 3, NULL);
+    xTaskCreate(vTaskGPS, "GPS Task", 4096 * 2, NULL, 4, NULL);
+    xTaskCreate(vTaskCompass, "Compass Task", 4096 * 2, NULL, 4, NULL);
 }
