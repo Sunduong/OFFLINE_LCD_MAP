@@ -1,6 +1,10 @@
 ﻿#ifndef GPS_DRIVER_H
 #define GPS_DRIVER_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "driver/uart.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
@@ -80,5 +84,9 @@ bool gps_driver_get_data(gps_data_t *data);
  * @return true if fix is valid (RMC status = 'A').
  */
 bool gps_driver_has_fix(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // GPS_DRIVER_H
