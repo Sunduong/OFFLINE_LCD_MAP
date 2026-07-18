@@ -9,12 +9,14 @@
 #include "board_config.h"
 #include "gps_driver.h"
 #include "compass_driver.h"
+#include "map_renderer.h"
 
 static const char *TAG = "APP_MAIN";
 
 lcd_t lcd;
 sd_card_t sd_card;
 button_driver_t button[BUTTON_MAX];
+map_handle_t map;
 
 void vTaskLCD(void *pvParameters)
 {
@@ -161,6 +163,20 @@ void vTaskCompass(void *pvParameters)
     }
 }
 
+void vTaskMap(void *pvParameters)
+{
+    gps_data_t gps_data;
+    while (1)
+    {
+        // Only render if GPS is fixed
+        if (gps_driver_get_data(&gps_data) && gps_driver_has_fix())
+        {
+            map_render(&map, gps_data.latitude, gps_data.longitude);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+}
+
 void app_main(void)
 {
     esp_err_t err;
@@ -198,10 +214,15 @@ void app_main(void)
         ESP_LOGI(TAG, "Compass initialized!");
     }
 
-    //vTaskLCD has higher priority than other tasks
-    xTaskCreate(vTaskLCD, "LCD Task", 4096 * 2, NULL, 4, NULL);
+    err = map_renderer_init(&map, &lcd, &sd_card, 15);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Map renderer init failed: %s", esp_err_to_name(err));
+    }
+
     xTaskCreate(vTaskSDCard, "SD Card Task", 4096 * 2, NULL, 2, NULL);
     xTaskCreate(vTaskButton, "Button Task", 4096 * 2, NULL, 3, NULL);
     xTaskCreate(vTaskGPS, "GPS Task", 4096 * 2, NULL, 4, NULL);
     xTaskCreate(vTaskCompass, "Compass Task", 4096 * 2, NULL, 4, NULL);
+    xTaskCreate(vTaskMap, "Map task", 4096 * 2, NULL, 5, NULL);
 }

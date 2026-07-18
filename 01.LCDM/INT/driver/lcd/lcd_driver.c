@@ -3,6 +3,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include <string.h>
+#include "map_define.h"
 
 static const char *TAG = "LCD_DRIVER";
 
@@ -232,6 +233,7 @@ void lcd_fill_rect(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y
     uint8_t *line_buf = heap_caps_malloc(width * 3, MALLOC_CAP_DMA);
     if (line_buf == NULL) {
         ESP_LOGE(TAG, "Failed to allocate line buffer!");
+        spi_device_release_bus(lcd->spi); 
         return;
     }
 
@@ -295,4 +297,36 @@ void lcd_draw_rect(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y
     lcd_draw_vline(lcd, x2, y1, y2 - y1 + 1, color); //Right line
     lcd_draw_hline(lcd, x1, y2, x2 - x1 + 1, color); //Bottom line
     lcd_draw_vline(lcd, x1, y1, y2 - y1 + 1, color); //Left line
+}
+
+void lcd_draw_bitmap(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, const uint8_t *data)
+{
+    if (lcd == NULL || data == NULL) return;
+    ESP_ERROR_CHECK(spi_device_acquire_bus(lcd->spi, portMAX_DELAY));
+    lcd_set_window(lcd, x1, y1, x2, y2);
+    uint16_t width = x2 - x1 + 1;
+    uint16_t height = y2 - y1 + 1;
+
+    // Allocate a line buffer (DMA-capable memory)
+    // Size: one row of pixels × 3 bytes per pixel
+    uint8_t *line_buf = heap_caps_malloc(width * 3, MALLOC_CAP_DMA);
+    if (line_buf == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate line buffer!");
+        spi_device_release_bus(lcd->spi); 
+        return;
+    }
+
+    // Draw line by line from data pointer
+    for (int dy = 0; dy < height; dy++)
+    {
+        for (int dx = 0; dx < width; dx++)
+        {
+            line_buf[dx * 3 + 0] = data[(TILE_SIZE * dy + dx) * 3 + 0];
+            line_buf[dx * 3 + 1] = data[(TILE_SIZE * dy + dx) * 3 + 1];
+            line_buf[dx * 3 + 2] = data[(TILE_SIZE * dy + dx) * 3 + 2];
+        }
+        lcd_send_data(lcd, line_buf, width * 3);
+    }
+    free(line_buf);
+    spi_device_release_bus(lcd->spi); 
 }
