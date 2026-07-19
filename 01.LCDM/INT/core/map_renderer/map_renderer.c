@@ -2,6 +2,7 @@
 #include "map_parser.h"
 #include "map_math.h"
 #include <math.h>
+#include <stddef.h>
 
 static const char *TAG = "MAP_RENDERER";
 
@@ -58,6 +59,7 @@ void mao_renderer_deinit(map_handle_t *map)
  */
 void map_render(map_handle_t *map, double lat, double lon)
 {
+    static bool screen_clr_flag = false;
     if (map == NULL || map->tile_buf == NULL)
     {
         ESP_LOGW(TAG, "No tile data to render!");
@@ -78,7 +80,11 @@ void map_render(map_handle_t *map, double lat, double lon)
                  base_screen_x, base_screen_y);
     
     // Step 3: Clear the screen first (in case tiles are missing)
-    lcd_fill_screen(map->lcd, COLOR_BLACK);
+    if (screen_clr_flag == false)
+    {
+        screen_clr_flag = true;
+        lcd_fill_screen(map->lcd, COLOR_BLACK);
+    }
 
     // Step 4: Load and draw 9 tiles (3x3 grid)
     for (int dy = -1; dy <= 1; dy++)
@@ -102,16 +108,35 @@ void map_render(map_handle_t *map, double lat, double lon)
             {
                 ESP_LOGW(TAG, "Missing tile (%d,%d) - drawing gray", tile_x, tile_y);
                 // Draw green rectangle for missing tile
-                int draw_x = (screen_x <= 0) ? 0 : screen_x;
-                int draw_y = (screen_y <= 0) ? 0 : screen_y;
-                int draw_x2 = ((screen_x + TILE_SIZE) >= LCD_WIDTH) ? (LCD_WIDTH - 1) : (screen_x + TILE_SIZE - 1);
-                int draw_y2 = ((screen_y + TILE_SIZE) >= LCD_HEIGHT) ? (LCD_HEIGHT - 1) : (screen_y + TILE_SIZE - 1);
-                lcd_fill_rect(map->lcd, draw_x, draw_y, draw_x2, draw_y2, COLOR_GREEN);
+                int draw_x1 = (screen_x <= 0) ? 0 : screen_x;
+                int draw_y1 = (screen_y <= 0) ? 0 : screen_y;
+                int draw_x2 = ((screen_x + TILE_SIZE - 1) >= LCD_WIDTH) ? (LCD_WIDTH - 1) : (screen_x + TILE_SIZE - 1);
+                int draw_y2 = ((screen_y + TILE_SIZE - 1) >= LCD_HEIGHT) ? (LCD_HEIGHT - 1) : (screen_y + TILE_SIZE - 1);
+                lcd_fill_rect(map->lcd, draw_x1, draw_y1, draw_x2, draw_y2, COLOR_GREEN);
                 continue;
             }
 
-            // Draw tile on LCD
-            lcd_draw_bitmap(map->lcd, screen_x, screen_y, screen_x + TILE_SIZE - 1, screen_y + TILE_SIZE - 1, map->tile_buf);
+            int draw_x1 = (screen_x < 0) ? 0 : screen_x;
+            int draw_y1 = (screen_y < 0) ? 0 : screen_y;
+            int draw_x2 = ((screen_x + TILE_SIZE - 1) >= LCD_WIDTH) ? (LCD_WIDTH - 1) : (screen_x + TILE_SIZE - 1);
+            int draw_y2 = ((screen_y + TILE_SIZE - 1) >= LCD_HEIGHT) ? (LCD_HEIGHT - 1) : (screen_y + TILE_SIZE - 1);
+
+            if (draw_x1 >= draw_x2 || draw_y1 >= draw_y2)   continue;
+
+            // Source offsets inside the tile
+            uint16_t src_x = (screen_x < 0) ? (uint16_t)(-screen_x) : 0;
+            uint16_t src_y = (screen_y < 0) ? (uint16_t)(-screen_y) : 0;
+
+            uint16_t width = (uint16_t)(draw_x2- draw_x1 + 1);
+            uint16_t height = (uint16_t)(draw_y2 - draw_y1 + 1);
+
+            if (src_x == 0 && src_y == 0 && width == TILE_SIZE && height == TILE_SIZE)
+            {
+                lcd_draw_bitmap(map->lcd, draw_x1, draw_y1, draw_x2, draw_y2, map->tile_buf);
+            }
+            {
+                lcd_draw_bitmap_region(map->lcd, draw_x1, draw_y1, draw_x2, draw_y2, src_x, src_y, map->tile_buf);
+            }
         }
     }
 

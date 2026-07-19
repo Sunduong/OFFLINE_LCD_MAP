@@ -36,7 +36,7 @@ static esp_err_t gps_uart_init(void)
         return err;
     }
 
-    err = uart_set_pin(GPS_UART_NUM, GPIO_NUM_5, GPIO_NUM_4, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    err = uart_set_pin(GPS_UART_NUM, GPIO_NUM_48, GPIO_NUM_47, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     if (err != ESP_OK) {
         return err;
     }
@@ -46,7 +46,7 @@ static esp_err_t gps_uart_init(void)
         return err;
     }
 
-    ESP_LOGI(TAG, "UART initialized: baud=%d, TX=GPIO5, RX=GPIO4", GPS_BAUD_RATE);
+    ESP_LOGI(TAG, "UART initialized: baud=%d, TX=GPIO48, RX=GPIO47", GPS_BAUD_RATE);
     return ESP_OK;
 }
 
@@ -67,12 +67,21 @@ static void gps_task(void *arg)
 {
     uart_event_t event;
     uint8_t data[256];
+    // char buf[257];
 
     while (1) {
         if (xQueueReceive(s_uart_event_queue, &event, portMAX_DELAY) == pdTRUE) {
             switch (event.type) {
             case UART_DATA: {
                 int len = uart_read_bytes(GPS_UART_NUM, data, event.size, pdMS_TO_TICKS(10));
+                // if (len > 0)
+                // {
+                //     memcpy(buf, data, len);
+                //     buf[len] = 0;
+
+                //     ESP_LOGI(TAG, "%s", buf);
+                // }
+
                 if (len <= 0) {
                     break;
                 }
@@ -204,6 +213,7 @@ void gps_driver_deinit(void)
 bool gps_driver_get_data(gps_data_t *data)
 {
     if (data == NULL || s_data_mutex == NULL) {
+        ESP_LOGE(TAG, "Failed to get GPS data");
         return false;
     }
 

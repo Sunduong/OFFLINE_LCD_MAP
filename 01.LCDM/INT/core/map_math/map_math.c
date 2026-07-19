@@ -51,6 +51,6 @@ void gps_to_map_position(double lat, double lon, int zoom, map_position_t *pos)
     pos->base_tile_x = (int)(pos->tile_x);
     pos->base_tile_y = (int)(pos->tile_y);
 
-    pos->pixel_offset_x = (int)(pos->tile_x - pos->base_tile_x);
-    pos->pixel_offset_y = (int)(pos->tile_y - pos->base_tile_y);
+    pos->pixel_offset_x = (int)((pos->tile_x - pos->base_tile_x) * TILE_SIZE);
+    pos->pixel_offset_y = (int)((pos->tile_y - pos->base_tile_y) * TILE_SIZE);
 }

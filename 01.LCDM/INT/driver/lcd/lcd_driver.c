@@ -299,13 +299,27 @@ void lcd_draw_rect(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y
     lcd_draw_vline(lcd, x1, y1, y2 - y1 + 1, color); //Left line
 }
 
+/**
+ * @brief  draw bitmap full tile from constant data
+ *
+ * Draw full tile if tile is completely inside the lcd range
+ * 
+ * @param lcd       LCD handle
+ * @param x1        start x
+ * @param y1        start y
+ * @param x2        finish x
+ * @param y2        finish y
+ * @param data      data buffer to draw
+ */
 void lcd_draw_bitmap(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, const uint8_t *data)
 {
     if (lcd == NULL || data == NULL) return;
-    ESP_ERROR_CHECK(spi_device_acquire_bus(lcd->spi, portMAX_DELAY));
-    lcd_set_window(lcd, x1, y1, x2, y2);
+
     uint16_t width = x2 - x1 + 1;
     uint16_t height = y2 - y1 + 1;
+
+    ESP_ERROR_CHECK(spi_device_acquire_bus(lcd->spi, portMAX_DELAY));
+    lcd_set_window(lcd, x1, y1, x2, y2);
 
     // Allocate a line buffer (DMA-capable memory)
     // Size: one row of pixels × 3 bytes per pixel
@@ -327,6 +341,55 @@ void lcd_draw_bitmap(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t
         }
         lcd_send_data(lcd, line_buf, width * 3);
     }
+    free(line_buf);
+    spi_device_release_bus(lcd->spi); 
+}
+
+/**
+ * @brief  draw bitmap in a region from constant data
+ *
+ * Draw part of a tile if tile is not completely inside the lcd range
+ * 
+ * @param lcd       LCD handle
+ * @param x1        start x
+ * @param y1        start y
+ * @param x2        finish x
+ * @param y2        finish y
+ * @param data      data buffer to draw
+ */
+void lcd_draw_bitmap_region(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, 
+                            uint16_t src_x, uint16_t src_y, const uint8_t *data)
+{
+    if (lcd == NULL || data == NULL) return;
+
+    uint16_t width = x2 - x1 + 1;
+    uint16_t height = y2 - y1 + 1;
+
+    ESP_ERROR_CHECK(spi_device_acquire_bus(lcd->spi, portMAX_DELAY));
+    lcd_set_window(lcd, x1, y1, x2, y2);
+
+    // Allocate a line buffer (DMA-capable memory)
+    // Size: one row of pixels × 3 bytes per pixel
+    uint8_t *line_buf = heap_caps_malloc(width * 3, MALLOC_CAP_DMA);
+    if (line_buf == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate line buffer!");
+        spi_device_release_bus(lcd->spi); 
+        return;
+    }
+    // Draw line by line from data pointer
+    for (uint16_t dy = 0; dy < height; dy++)
+    {
+        // convert full data tile into a data region
+        const uint8_t *src_row = data + ((size_t)TILE_SIZE * (dy + src_y) + src_x) * 3;
+        for (uint16_t dx = 0; dx < width; dx++)
+        {
+            line_buf[dx * 3 + 0] = src_row[dx * 3 + 0];
+            line_buf[dx * 3 + 1] = src_row[dx * 3 + 1];
+            line_buf[dx * 3 + 2] = src_row[dx * 3 + 2];
+        }
+        lcd_send_data(lcd, line_buf, width * 3);
+    }
+
     free(line_buf);
     spi_device_release_bus(lcd->spi); 
 }
