@@ -1,5 +1,5 @@
-## 2026-06-11
-# ILI9488 LCD Bug
+# 2026-06-11
+## ILI9488 LCD Bug
 I follow AI chatbot to dev this LCD driver. I choose Color Mode like RGB565 - 16 bit
 
 ```
@@ -12,8 +12,8 @@ Then my module always show white screen. It's an issue.
 I doubt and debug many things. I check my SPI protocol can initialize successfully.  So what is the reason why?
 I changed the color mode, I see it can work well.
 
-## 2026-06-29
-# SD CARD Bug
+# 2026-06-29
+## SD CARD Bug
 I wrote the SD card SPI driver. I control LCD CS and SD CS pin manually.
 When I wrote done. I check, the LOG always come out: 
 
@@ -71,3 +71,177 @@ Triệu chứng:
 - Logic Analyzer thấy CMD0 gửi đúng.
 - SD không phản hồi.
 - Sau khi nối chung bus thì CMD0 trả 0x01.
+
+
+
+# 2026-07-23
+## Bottle neck when map is loaded on LCD
+
+
+10 giây cho `fread(192KB)` — tôi cần đo chi tiết để tìm bottleneck chính xác. Thay vì đoán, hãy thêm code đo thời gian vào từng bước.
+
+### 🔬 Đề xuất: Thêm timing vào `sd_card_read_file`
+
+```c
+int sd_card_read_file(sd_card_t *sd, const char *path, uint8_t *buffer, size_t max_len)
+{
+ if (!sd->mounted) {
+ ESP_LOGE(TAG, "SD card not mounted!");
+ return -1;
+ }
+
+ int64_t t0 = esp_timer_get_time();
+
+ FILE *f = fopen(path, "rb");
+ int64_t t1 = esp_timer_get_time();
+ if (f == NULL) {
+ ESP_LOGE(TAG, "Failed to open file: %s", path);
+ return -1;
+ }
+
+ size_t bytes_read = fread(buffer, 1, max_len, f);
+ int64_t t2 = esp_timer_get_time();
+
+ fclose(f);
+ int64_t t3 = esp_timer_get_time();
+
+ ESP_LOGI(TAG, "fopen: %lld ms | fread: %lld ms | fclose: %lld ms | total: %lld ms | bytes: %u",
+ (t1 - t0) / 1000,
+ (t2 - t1) / 1000,
+ (t3 - t2) / 1000,
+ (t3 - t0) / 1000,
+ bytes_read);
+
+ return (int)bytes_read;
+}
+```
+
+Cần thêm `hashtag#include "esp_timer.h"` ở đầu file.
+
+### Kết quả sẽ cho biết:
+
+| Kịch bản | fopen | fread | fclose | Nguyên nhân |
+|----------|-------|-------|--------|-------------|
+| A | ~10s | ~0ms | ~0ms | fopen bottleneck (directory parse) |
+| B | ~0ms | ~10s | ~0ms | fread bottleneck (sector-by-sector read) |
+| C | ~0ms | ~0ms | ~10s | fclose bottleneck (unlikely) |
+| D | ~3s | ~4s | ~3s | Tất cả đều chậm |
+
+### Nếu fread là bottleneck (Kịch bản B — khả năng cao nhất):
+
+Thêm đo chi tiết hơn trong `map_load_tile`:
+
+```c
+esp_err_t map_load_tile(sd_card_t *sd, int zoom, int tile_x, int tile_y, uint8_t *buffer)
+{
+ // ... existing code ...
+ 
+ int64_t t0 = esp_timer_get_time();
+ int bytes_read = sd_card_read_file(sd, path, buffer, TILE_BYTES_RGB666);
+ int64_t t1 = esp_timer_get_time();
+ 
+ ESP_LOGI(TAG, "map_load_tile total: %lld ms", (t1 - t0) / 1000);
+ // ...
+}
+```
+
+### Nếu muốn đo chi tiết hơn trong fread:
+
+Chia fread thành nhiều lần đọc nhỏ để xem tốc độ đọc có đều không:
+
+```c
+// Thay vì fread 192KB 1 lần:
+size_t chunk_size = 4096; // 4KB
+size_t total_read = 0;
+for (int i = 0; i < 48; i++) // 48 chunks × 4KB = 192KB
+{
+ int64_t tc0 = esp_timer_get_time();
+ size_t r = fread(buffer + total_read, 1, chunk_size, f);
+ int64_t tc1 = esp_timer_get_time();
+ 
+ if (i < 3 || i >= 45) // Log first 3 + last 3 chunks
+ ESP_LOGI(TAG, "chunk %d: %lld ms (%u bytes)", i, (tc1-tc0)/1000, r);
+ 
+ total_read += r;
+}
+```
+
+→ Biết đọc chunk đầu có chậm hơn chunk cuối không (FAT chain lookup vs sequential read).
+
+Bạn thêm code đo thời gian vào `sd_card_read_file` rồi chạy thử được không? Kết quả sẽ cho biết chính xác bottleneck ở đâu.
+
+
+
+
+
+I (136231) SD_CARD_DRIVER: 123456789
+I (136231) SD_CARD_DRIVER: fopen: 501 ms | fread: 16058 ms | fclose: 0 ms | total: 16560 ms | bytes: 196608
+I (136231) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52196/30778.bin
+
+
+## Solution
+1. https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/sdspi_host.html
+2. Bật Log Verbose để check các log ở tầng dưới của esp idf library
+Cách bật
+```
+esp_log_level_set("sdspi_host", ESP_LOG_VERBOSE);
+esp_log_level_set("sdmmc_cmd", ESP_LOG_VERBOSE);
+esp_log_level_set("diskio_sdmmc", ESP_LOG_VERBOSE);
+```
+### When the issue appear, this is the LOG:
+```
+D (127683) sdspi_host: poll_busy: timeout
+V (127693) sdmmc_cmd: cmd response 00000000 00000000 00000000 00000000 err=0x0 state=0
+V (127693) sdmmc_cmd: sending cmd slot=1 op=17 arg=15ede flags=1c50 data=0x3fc9e4b0 blklen=512 datalen=512 timeout=1000
+V (127703) sdspi_host: sdspi_host_start_command: slot=1, CMD17, arg=0x00015ede flags=0x5, data=0x3fc9e4b0, data_size=512 crc=0x71
+D (127753) sdspi_host: poll_busy: timeout
+V (127753) sdmmc_cmd: cmd response 00000000 00000000 00000000 00000000 err=0x0 state=0
+V (127753) sdmmc_cmd: sending cmd slot=1 op=17 arg=15edf flags=1c50 data=0x3fc9e4b0 blklen=512 datalen=512 timeout=1000
+V (127763) sdspi_host: sdspi_host_start_command: slot=1, CMD17, arg=0x00015edf flags=0x5, data=0x3fc9e4b0, data_size=512 crc=0x78
+D (127813) sdspi_host: poll_busy: timeout
+V (127813) sdmmc_cmd: cmd response 00000000 00000000 00000000 00000000 err=0x0 state=0
+I (127813) SD_CARD_DRIVER: fopen: 827 ms | fread: 24493 ms | fclose: 0 ms | total: 25321 ms | bytes: 196608
+I (127823) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52195/30780.bin
+```
+
+### When issue is fixed, this is the LOG:
+1. Fix by pull up 10k resitor on MISO pin:
+```
+I (30819) SD_CARD_DRIVER: fopen: 28 ms | fread: 773 ms | fclose: 0 ms | total: 801 ms | bytes: 196608 | speed: 248 KB/s | err: 0
+I (30819) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52196/30779.bin
+I (31679) SD_CARD_DRIVER: fopen: 28 ms | fread: 772 ms | fclose: 0 ms | total: 800 ms | bytes: 196608 | speed: 248 KB/s | err: 0
+I (31679) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52195/30780.bin
+I (32549) SD_CARD_DRIVER: fopen: 32 ms | fread: 776 ms | fclose: 0 ms | total: 809 ms | bytes: 196608 | speed: 247 KB/s | err: 0
+I (32549) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52196/30780.bin
+I (33609) MAP_RENDERER: Render: lat=10.856290 lon=106.720550 tile=(52195,30779) offset=(226,189) screen_base=(-66,51)
+I (34409) SD_CARD_DRIVER: fopen: 26 ms | fread: 775 ms | fclose: 0 ms | total: 802 ms | bytes: 196608 | speed: 247 KB/s | err: 0
+I (34409) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52195/30778.bin
+I (35229) SD_CARD_DRIVER: fopen: 26 ms | fread: 773 ms | fclose: 0 ms | total: 799 ms | bytes: 196608 | speed: 248 KB/s | err: 0
+I (35229) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52196/30778.bin
+I (36059) SD_CARD_DRIVER: fopen: 28 ms | fread: 774 ms | fclose: 0 ms | total: 802 ms | bytes: 196608 | speed: 248 KB/s | err: 0
+I (36059) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52195/30779.bin
+```
+
+2. Fix by setvbuf:
+```
+                                            Số lệnh	        Chi phí/lệnh	Tổng (ước tính)	        Số đo thực tế
+Ban đầu (không setvbuf, không pull-up)      ~384	        ~40ms	        ~15.4s	                ~16s ✅
+Chỉ thêm pull-up	                        ~384	        ~2ms	        ~0.8s	                ~0.8s ✅
+Chỉ thêm setvbuf (trường hợp bạn vừa test)	~24	            ~40ms	        ~1s	                    ~1.5s ✅
+Cả 2 cùng lúc	                            ~24	            ~2ms	        ~50-100ms	            (chưa test)
+```
+```
+I (924) MAP_RENDERER: Render: lat=10.856290 lon=106.720550 tile=(52195,30779) offset=(226,189) screen_base=(-66,51)
+I (934) main_task: Returned from app_main()
+I (1424) SD_CARD_DRIVER: fopen: 26 ms | fread: 263 ms | fclose: 0 ms | total: 289 ms | bytes: 196608 | speed: 729 KB/s | err: 0
+I (1434) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52195/30778.bin
+I (1744) SD_CARD_DRIVER: fopen: 26 ms | fread: 263 ms | fclose: 0 ms | total: 290 ms | bytes: 196608 | speed: 727 KB/s | err: 0
+I (1744) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52196/30778.bin
+I (2054) SD_CARD_DRIVER: fopen: 28 ms | fread: 262 ms | fclose: 0 ms | total: 291 ms | bytes: 196608 | speed: 730 KB/s | err: 0
+I (2054) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52195/30779.bin
+I (2434) SD_CARD_DRIVER: fopen: 28 ms | fread: 263 ms | fclose: 0 ms | total: 292 ms | bytes: 196608 | speed: 727 KB/s | err: 0
+I (2434) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52196/30779.bin
+I (2784) SD_CARD_DRIVER: fopen: 28 ms | fread: 262 ms | fclose: 0 ms | total: 291 ms | bytes: 196608 | speed: 730 KB/s | err: 0
+I (2784) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52195/30780.bin
+I (3134) SD_CARD_DRIVER: fopen: 28 ms | fread: 265 ms | fclose: 0 ms | total: 294 ms
+```
