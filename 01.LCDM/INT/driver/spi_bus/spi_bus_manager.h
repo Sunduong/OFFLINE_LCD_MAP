@@ -20,6 +20,10 @@
 #define SPI_LCD_DC_PIN      8    //Channel 3 of Logic Analyzer
 #define LCD_RESET_PIN       7
 
+// ──────────────────────────── SPI setting ────────────────────────────
+#define CHUNK_SIZE_PER_TRANSACTION  4096
+#define SPI_BUS_MAX_TRANSFER_SIZE   (64 * 1024)
+#define LCD_QUEUE_SIZE              7
 // ──────────────────────────── Public API ────────────────────────────
 
 /**

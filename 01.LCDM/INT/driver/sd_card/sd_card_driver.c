@@ -6,8 +6,10 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include "esp_timer.h"
 
 static const char *TAG = "SD_CARD_DRIVER";
+static const size_t SD_FILE_BUFFER_SIZE = 32 * 1024;
 static sdmmc_host_t sd_host = SDSPI_HOST_DEFAULT();
 static sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
 // ──────────────────────────── Static Variables ────────────────────────────
@@ -146,19 +148,35 @@ int sd_card_read_file(sd_card_t *sd, const char *path, uint8_t *buffer, size_t m
         return -1;
     }
 
+    int64_t t0 = esp_timer_get_time();
+
     // Open file in binary read mode
     // Path must start with /sdcard/ (e.g. "/sdcard/test.txt")
     FILE *f = fopen(path, "rb");
+    int64_t t1 = esp_timer_get_time();
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file: %s", path);
         return -1;
     }
+    setvbuf(f, NULL, _IOFBF, SD_FILE_BUFFER_SIZE);
 
     // Read data into buffer
     size_t bytes_read = fread(buffer, 1, max_len, f);
+    int64_t t2 = esp_timer_get_time();
+    int read_error = ferror(f);
     fclose(f);
-
-    ESP_LOGI(TAG, "Read %u bytes from %s", bytes_read, path);
+    int64_t t3 = esp_timer_get_time();
+    int64_t read_us = t2 - t1;
+    uint32_t read_kbps = (read_us > 0) ? (uint32_t)((bytes_read * 1000000ULL) / (1024ULL * read_us)) : 0;
+    ESP_LOGI(TAG, "fopen: %lld ms | fread: %lld ms | fclose: %lld ms | total: %lld ms | bytes: %zu | speed: %lu KB/s | err: %d",
+    (long long)(t1 - t0) / 1000,
+    (long long)(t2 - t1) / 1000,
+    (long long)(t3 - t2) / 1000,
+    (long long)(t3 - t0) / 1000,
+    bytes_read,
+    (unsigned long)read_kbps,
+    read_error);
+    ESP_LOGI(TAG, "Read %zu bytes from %s", bytes_read, path);
     return (int)bytes_read;
 }
 

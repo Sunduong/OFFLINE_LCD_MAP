@@ -108,13 +108,16 @@ void app_main(void)
     lcd_init(&lcd, SPI2_HOST);
     ESP_LOGI(TAG, "LCD initialized!");
 
+    // esp_log_level_set("sdmmc_cmd", ESP_LOG_VERBOSE);
+    // esp_log_level_set("sdspi_host", ESP_LOG_VERBOSE);
+    // esp_log_level_set("diskio_sdmmc", ESP_LOG_VERBOSE);
     sd_card_init(&sd_card, SPI2_HOST);
     ESP_LOGI(TAG, "SD Card initialized!");
 
-    for (int i = 0; i < BUTTON_MAX; i++)
-    {
-        button_driver_init(&button[i], button_pins[i], NULL, 0, 0);
-    }
+    // for (int i = 0; i < BUTTON_MAX; i++)
+    // {
+    //     button_driver_init(&button[i], button_pins[i], NULL, 0, 0);
+    // }
     
     // err = gps_driver_init();
     // if (err != ESP_OK)
@@ -142,7 +145,7 @@ void app_main(void)
         ESP_LOGE(TAG, "Map renderer init failed: %s", esp_err_to_name(err));
     }
     
-    xTaskCreate(vTaskButton, "Button Task", 4096 * 2, NULL, 3, NULL);
+    // xTaskCreate(vTaskButton, "Button Task", 4096 * 2, NULL, 3, NULL);
     // xTaskCreate(vTaskGPS, "GPS Task", 4096 * 2, NULL, 4, NULL);
     // xTaskCreate(vTaskCompass, "Compass Task", 4096 * 2, NULL, 4, NULL);
     xTaskCreate(vTaskMap, "Map task", 4096 * 2, NULL, 5, NULL);

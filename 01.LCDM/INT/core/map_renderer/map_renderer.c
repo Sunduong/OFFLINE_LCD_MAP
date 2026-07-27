@@ -134,6 +134,7 @@ void map_render(map_handle_t *map, double lat, double lon)
             {
                 lcd_draw_bitmap(map->lcd, draw_x1, draw_y1, draw_x2, draw_y2, map->tile_buf);
             }
+            else
             {
                 lcd_draw_bitmap_region(map->lcd, draw_x1, draw_y1, draw_x2, draw_y2, src_x, src_y, map->tile_buf);
             }
