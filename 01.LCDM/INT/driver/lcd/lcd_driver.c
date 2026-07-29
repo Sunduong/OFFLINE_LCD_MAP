@@ -2,6 +2,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_err.h"
 #include <string.h>
 #include "map_define.h"
 
@@ -368,8 +369,83 @@ void lcd_draw_bitmap(lcd_t *lcd, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t
     ESP_ERROR_CHECK(spi_device_acquire_bus(lcd->spi, portMAX_DELAY));
     lcd_set_window(lcd, x1, y1, x2, y2);
     // lcd_send_data(lcd, data, height * width * 3);
-    lcd_send_data_queue(lcd, data, total_data_byte);
+    // If caller provides a PSRAM-backed buffer and the platform supports
+    // DMA from external RAM, callers may instead call `lcd_send_data_psram_dma`.
+    lcd_send_data_psram_dma(lcd, data, total_data_byte);
     spi_device_release_bus(lcd->spi);
+}
+
+/**
+ * @brief Send data from PSRAM directly to LCD using DMA-capable transactions.
+ *
+ * This function attempts to transmit directly from the provided `data`
+ * pointer in chunks no larger than `SPI_BUS_MAX_TRANSFER_SIZE` using
+ * polling transmits. If the underlying platform and allocation support
+ * DMA from external RAM, this avoids copying into an intermediate buffer.
+ */
+void lcd_send_data_psram_dma(lcd_t *lcd, const uint8_t *data, uint32_t total_data_byte)
+{
+    if (total_data_byte == 0) return;
+    if (data == NULL) return;
+    // Determine safe maximum chunk size based on compile-time and SOC limits
+    uint32_t soc_max = SOC_SPI_MAXIMUM_BUFFER_SIZE;
+    uint32_t max_chunk = (SPI_BUS_MAX_TRANSFER_SIZE < soc_max) ? SPI_BUS_MAX_TRANSFER_SIZE : soc_max;
+    if (max_chunk == 0) max_chunk = 4096; // sensible default
+    ESP_LOGI(TAG, "lcd_send_data_psram_dma: total=%u, max_chunk=%u", (unsigned)total_data_byte, (unsigned)max_chunk);
+
+    uint32_t offset = 0;
+    while (offset < total_data_byte)
+    {
+        uint32_t remaining = total_data_byte - offset;
+        uint32_t chunk = (remaining > max_chunk) ? max_chunk : remaining;
+
+        spi_transaction_t t;
+        memset(&t, 0, sizeof(t));
+        t.length = chunk * 8U;
+        t.tx_buffer = data + offset;
+        t.user = (void*)1; // DC high for data
+
+        esp_err_t err = spi_device_polling_transmit(lcd->spi, &t);
+        if (err == ESP_OK) {
+            offset += chunk;
+            continue;
+        }
+
+        ESP_LOGW(TAG, "Direct PSRAM DMA transmit failed: %s, falling back to copy method", esp_err_to_name(err));
+
+        // Fallback: allocate a DMA-capable chunk buffer and copy remaining data.
+        // Use min(max_chunk, CHUNK_SIZE_PER_TRANSACTION) for fallback buffer.
+        uint32_t dma_alloc_size = (CHUNK_SIZE_PER_TRANSACTION < max_chunk) ? CHUNK_SIZE_PER_TRANSACTION : max_chunk;
+        uint8_t *dma_buf = heap_caps_malloc(dma_alloc_size, MALLOC_CAP_DMA);
+        if (dma_buf == NULL) {
+            ESP_LOGE(TAG, "Fallback DMA buffer allocation failed");
+            return;
+        }
+
+        while (offset < total_data_byte)
+        {
+            remaining = total_data_byte - offset;
+            uint32_t subchunk = (remaining > dma_alloc_size) ? dma_alloc_size : remaining;
+            memcpy(dma_buf, data + offset, subchunk);
+
+            spi_transaction_t tt;
+            memset(&tt, 0, sizeof(tt));
+            tt.length = subchunk * 8U;
+            tt.tx_buffer = dma_buf;
+            tt.user = (void*)1;
+
+            esp_err_t err2 = spi_device_polling_transmit(lcd->spi, &tt);
+            if (err2 != ESP_OK) {
+                ESP_LOGE(TAG, "Fallback DMA transmit failed: %s", esp_err_to_name(err2));
+                heap_caps_free(dma_buf);
+                return;
+            }
+            offset += subchunk;
+        }
+
+        heap_caps_free(dma_buf);
+        return; // all remaining bytes sent via fallback
+    }
 }
 
 /**

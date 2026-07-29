@@ -132,7 +132,7 @@ void map_render(map_handle_t *map, double lat, double lon)
 
             if (src_x == 0 && src_y == 0 && width == TILE_SIZE && height == TILE_SIZE)
             {
-                lcd_draw_bitmap(map->lcd, draw_x1, draw_y1, draw_x2, draw_y2, map->tile_buf);
+                // lcd_draw_bitmap(map->lcd, draw_x1, draw_y1, draw_x2, draw_y2, map->tile_buf);
             }
             else
             {
