@@ -230,6 +230,15 @@ Chỉ thêm pull-up	                        ~384	        ~2ms	        ~0.8s	    
 Chỉ thêm setvbuf (trường hợp bạn vừa test)	~24	            ~40ms	        ~1s	                    ~1.5s ✅
 Cả 2 cùng lúc	                            ~24	            ~2ms	        ~50-100ms	            (chưa test)
 ```
+
+3. Fix by both 1 and 2
+```
+Giai đoạn	                        fopen	        fread	        Tổng
+Ban đầu (chưa fix gì)	            501ms	        16058ms	        16560ms
+Chỉ pull-up MISO	                26ms	        772ms	        800ms
+Chỉ setvbuf	                        28ms	        ~772ms	        ~800ms
+Cả 2 kết hợp	                    26-28ms	        262-265ms	    ~290ms
+```
 ```
 I (924) MAP_RENDERER: Render: lat=10.856290 lon=106.720550 tile=(52195,30779) offset=(226,189) screen_base=(-66,51)
 I (934) main_task: Returned from app_main()
@@ -245,3 +254,63 @@ I (2784) SD_CARD_DRIVER: fopen: 28 ms | fread: 262 ms | fclose: 0 ms | total: 29
 I (2784) SD_CARD_DRIVER: Read 196608 bytes from /sdcard/maps/16/52195/30780.bin
 I (3134) SD_CARD_DRIVER: fopen: 28 ms | fread: 265 ms | fclose: 0 ms | total: 294 ms
 ```
+
+# 2026-07-29
+
+## Title: Enable PSRAM for map cache using, my program gets crash
+
+1. Cause
+- I enable Heap memory debugging → Heap corruption detection → chọn "Comprehensive". I want to debug on Heap Memory
+- This is the LOG
+```
+ (1579) main_task: Calling app_main()
+I (1589) APP_MAIN: PSRAM size: 8388608 bytes
+I (1589) SPI_BUS_MANAGER: Initializing shared SPI bus...
+I (1599) SPI_BUS_MANAGER: SPI bus initialized (MOSI=11, MISO=12, SCK=10)
+I (1609) APP_MAIN: SPI Shared Bus initialized!
+I (1609) LCD_DRIVER: Initializing LCD...
+I (1619) LCD_DRIVER: LCD device added to SPI bus...
+I (1729) LCD_DRIVER: LCD hardware reset complete...
+I (1849) LCD_DRIVER: LCD software reset complete...
+I (1969) LCD_DRIVER: LCD sleep out complete...
+I (1969) LCD_DRIVER: LCD color mode set to RGB666...
+I (1969) LCD_DRIVER: LCD rotation set to portrait...
+I (1969) LCD_DRIVER: LCD normal display mode set...
+I (2079) LCD_DRIVER: LCD display turned on...
+I (2079) LCD_DRIVER: LCD initialization complete!
+I (2079) APP_MAIN: LCD initialized!
+I (2079) SD_CARD_DRIVER: Initializing SD card on shared SPI bus...
+I (2089) gpio: GPIO[13]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+I (2099) sdspi_transaction: cmd=52, R1 response: command not supported
+I (2139) sdspi_transaction: cmd=5, R1 response: command not supported
+I (2169) SD_CARD_DRIVER: SD card mounted at /sdcard
+Name: SD16G
+Type: SDHC/SDXC
+Speed: 10.00 MHz (limit: 10.00 MHz)
+Size: 15360MB
+CSD: ver=2, sector_size=512, capacity=31457280 read_bl_len=9
+SSR: bus_width=1
+I (2169) APP_MAIN: SD Card initialized!
+I (2179) gpio: GPIO[35]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0
+I (2189) gpio: GPIO[35]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:3
+CORRUPT HEAP: Invalid data at 0x3c0675a0. Expected 0xfefefefe got 0x4d684d68
+CORRUPT HEAP: Invalid data at 0x3c0675a4. Expected 0xfefefefe got 0x4d684d68
+CORRUPT HEAP: Invalid data at 0x3c0675a8. Expected 0xfefefefe got 0x4d684d68
+CORRUPT HEAP: Invalid data at 0x3c0675ac. Expected 0xfefefefe got 0x4d684d68
+```
+
+- Heap memory error appear while Button pin is initialized. I checked the esp hardware design and see that these button pins are also used for PSRAM connections.
+
+```
+ESP-IDF GPIO docs (ESP32-S3): "When using Octal flash or Octal PSRAM or both, GPIO33 ~ GPIO37 are connected to SPIIO4 ~ SPIIO7 and SPIDQS. Therefore, on boards embedded with ESP32-S3R8/R8V chip, GPIO33~37 are also not recommended for other uses."
+```
+2. Solution
+
+Cách fix — đổi 3 pin nút bấm sang GPIO an toàn
+
+Không dùng các dải GPIO sau trên ESP32-S3 (đặc biệt board có Octal PSRAM như của bạn):
+
+GPIO26-32 — luôn luôn cấm (dùng cho SPI flash/PSRAM chuẩn, mọi board S3)
+GPIO33-37 — cấm thêm khi có Octal PSRAM (board bạn đang dùng)
+GPIO0, 3, 45, 46 — chân bootstrap, tránh dùng làm input thường trừ khi hiểu rõ ảnh hưởng
+GPIO19, 20 — mặc định dùng cho USB-JTAG (vẫn dùng được nhưng sẽ tắt tính năng debug qua USB)

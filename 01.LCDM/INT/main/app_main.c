@@ -1,5 +1,9 @@
 #include <stdio.h>
+#include "sdkconfig.h"
 #include "esp_log.h"
+#if CONFIG_SPIRAM
+#  include "esp_psram.h"
+#endif
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lcd_driver.h"
@@ -10,6 +14,7 @@
 #include "gps_driver.h"
 #include "compass_driver.h"
 #include "map_renderer.h"
+#include "map_cache.h"
 
 static const char *TAG = "APP_MAIN";
 
@@ -102,6 +107,14 @@ void vTaskMap(void *pvParameters)
 void app_main(void)
 {
     esp_err_t err;
+    
+    // Check if PSRAM is enabled or not?
+#if CONFIG_SPIRAM
+    ESP_LOGI(TAG, "PSRAM size: %d bytes", esp_psram_get_size());
+#else
+    ESP_LOGI(TAG, "PSRAM is not enabled");
+#endif
+
     spi_bus_init(SPI2_HOST); // Initialize the shared SPI bus for both LCD and SD card
     ESP_LOGI(TAG, "SPI Shared Bus initialized!");
 
@@ -114,11 +127,11 @@ void app_main(void)
     sd_card_init(&sd_card, SPI2_HOST);
     ESP_LOGI(TAG, "SD Card initialized!");
 
-    // for (int i = 0; i < BUTTON_MAX; i++)
-    // {
-    //     button_driver_init(&button[i], button_pins[i], NULL, 0, 0);
-    // }
-    
+    for (int i = 0; i < BUTTON_MAX; i++)
+    {
+        button_driver_init(&button[i], button_pins[i], NULL, 0, 0);
+    }
+
     // err = gps_driver_init();
     // if (err != ESP_OK)
     // {
@@ -145,7 +158,11 @@ void app_main(void)
         ESP_LOGE(TAG, "Map renderer init failed: %s", esp_err_to_name(err));
     }
     
-    // xTaskCreate(vTaskButton, "Button Task", 4096 * 2, NULL, 3, NULL);
+    // Test DMA from PSRAM
+    test_psram_dma(&map);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    
+    xTaskCreate(vTaskButton, "Button Task", 4096 * 2, NULL, 3, NULL);
     // xTaskCreate(vTaskGPS, "GPS Task", 4096 * 2, NULL, 4, NULL);
     // xTaskCreate(vTaskCompass, "Compass Task", 4096 * 2, NULL, 4, NULL);
     xTaskCreate(vTaskMap, "Map task", 4096 * 2, NULL, 5, NULL);
