@@ -404,47 +404,10 @@ void lcd_send_data_psram_dma(lcd_t *lcd, const uint8_t *data, uint32_t total_dat
         t.length = chunk * 8U;
         t.tx_buffer = data + offset;
         t.user = (void*)1; // DC high for data
-
         esp_err_t err = spi_device_polling_transmit(lcd->spi, &t);
         if (err == ESP_OK) {
             offset += chunk;
-            continue;
         }
-
-        ESP_LOGW(TAG, "Direct PSRAM DMA transmit failed: %s, falling back to copy method", esp_err_to_name(err));
-
-        // Fallback: allocate a DMA-capable chunk buffer and copy remaining data.
-        // Use min(max_chunk, CHUNK_SIZE_PER_TRANSACTION) for fallback buffer.
-        uint32_t dma_alloc_size = (CHUNK_SIZE_PER_TRANSACTION < max_chunk) ? CHUNK_SIZE_PER_TRANSACTION : max_chunk;
-        uint8_t *dma_buf = heap_caps_malloc(dma_alloc_size, MALLOC_CAP_DMA);
-        if (dma_buf == NULL) {
-            ESP_LOGE(TAG, "Fallback DMA buffer allocation failed");
-            return;
-        }
-
-        while (offset < total_data_byte)
-        {
-            remaining = total_data_byte - offset;
-            uint32_t subchunk = (remaining > dma_alloc_size) ? dma_alloc_size : remaining;
-            memcpy(dma_buf, data + offset, subchunk);
-
-            spi_transaction_t tt;
-            memset(&tt, 0, sizeof(tt));
-            tt.length = subchunk * 8U;
-            tt.tx_buffer = dma_buf;
-            tt.user = (void*)1;
-
-            esp_err_t err2 = spi_device_polling_transmit(lcd->spi, &tt);
-            if (err2 != ESP_OK) {
-                ESP_LOGE(TAG, "Fallback DMA transmit failed: %s", esp_err_to_name(err2));
-                heap_caps_free(dma_buf);
-                return;
-            }
-            offset += subchunk;
-        }
-
-        heap_caps_free(dma_buf);
-        return; // all remaining bytes sent via fallback
     }
 }
 
